@@ -3,6 +3,7 @@ import {
   Users,
   Car,
   Calendar,
+   AlertCircle ,
   Building2,
   Tag,
   CreditCard,
@@ -16,7 +17,9 @@ import {
   BarChart3,
   ShieldCheck,
 } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { NavLink , useNavigate} from "react-router-dom";
+import { useState } from "react";
+import { authService } from "../features/auth/authService";
 import Logo from "../assets/Logo.png";
 
 type SidebarProps = {
@@ -25,6 +28,28 @@ type SidebarProps = {
 };
 
 const Sidebar = ({ isOpen = true, onClose = () => {} }: SidebarProps) => {
+
+  const navigate = useNavigate();
+   const [showLogoutModal, setShowLogoutModal] = useState(false);
+   const [isLoggingOut, setIsLoggingOut] = useState(false);
+ 
+   const handleLogout = async () => {
+   try {
+     setIsLoggingOut(true);
+     authService.logout();
+     navigate("/roles");
+     setShowLogoutModal(false);
+   } catch (error) {
+     console.error("Logout error:", error);
+   } finally {
+     setIsLoggingOut(false);
+   }
+ };
+ 
+ const handleCancelLogout = () => {
+   setShowLogoutModal(false);
+ };
+
   const sidebarItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/admin-dashboard" },
 
@@ -59,7 +84,8 @@ const Sidebar = ({ isOpen = true, onClose = () => {} }: SidebarProps) => {
     { icon: BarChart3, label: "Reports", path: "/admin-reports" },
 
     // Auth
-    { icon: LogOut, label: "Logout", path: "/admin-logout" },
+    // Auth
+    { icon: LogOut, label: "Logout", path: "#", onClick: () => setShowLogoutModal(true) },
   ];
 
   const currentYear = new Date().getFullYear();
@@ -127,17 +153,21 @@ const Sidebar = ({ isOpen = true, onClose = () => {} }: SidebarProps) => {
               <NavLink
                 key={index}
                 to={item.path}
+                onClick={(e) => {
+                  if (item.onClick) {
+                    e.preventDefault();
+                    item.onClick();
+                  }
+                  if (window.innerWidth < 1024) onClose();
+                }}
                 className={({ isActive }) =>
                   `group flex items-center px-3 py-3 text-sm font-medium rounded-xl transition-colors duration-150
                   ${
-                    isActive
+                    isActive && item.path !== "#"
                       ? "bg-[#1EA2E4] text-white shadow-md"
                       : "text-gray-600 hover:text-[#1EA2E4] hover:bg-[#1EA2E4]/15"
                   }`
                 }
-                onClick={() => {
-                  if (window.innerWidth < 1024) onClose();
-                }}
               >
                 <IconComponent className="w-5 h-5 mr-3" />
                 {item.label}
@@ -151,6 +181,62 @@ const Sidebar = ({ isOpen = true, onClose = () => {} }: SidebarProps) => {
           © {currentYear} Morental — Admin
         </div>
       </div>
+
+      {/* Logout Confirmation Modal */}
+{showLogoutModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+      onClick={handleCancelLogout}
+    />
+    <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
+      <div className="p-6">
+        <div className="flex items-center mb-4">
+          <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mr-4">
+            <AlertCircle className="w-6 h-6 text-red-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Confirm Logout</h3>
+            <p className="text-sm text-gray-600">Are you sure you want to logout?</p>
+          </div>
+        </div>
+
+        <p className="text-gray-600 mb-6">
+          You will need to login again to access your account.
+        </p>
+
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={handleCancelLogout}
+            className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {isLoggingOut ? (
+              <>
+                <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Logging out...</span>
+              </>
+            ) : (
+              <>
+                <LogOut className="w-4 h-4" />
+                <span>Logout</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </>
   );
 };

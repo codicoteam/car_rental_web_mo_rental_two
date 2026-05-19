@@ -25,3 +25,33 @@ export const getAllReservations = async (): Promise<Reservation[]> => {
 
   return response.data;
 };
+
+export const deleteReservation = async (reservationId: string): Promise<void> => {
+  const token = loadAuthFromStorage();
+
+  await axiosInstance.delete(
+    `${BASE_URL}/api/v1/reservations/${reservationId}`,
+    {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+      },
+    }
+  );
+};
+
+export const updateReservationStatus = async (reservationId: string, status: string): Promise<any> => {
+  const token = loadAuthFromStorage();
+
+  const response = await axiosInstance.patch(
+    `${BASE_URL}/api/v1/reservations/${reservationId}/status`,
+    { status },
+    {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  return response.data;
+};

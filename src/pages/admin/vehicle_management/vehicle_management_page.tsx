@@ -613,51 +613,53 @@ const VehicleModelManagement: React.FC = () => {
     };
 
     return (
-        <div className="flex min-h-screen bg-gray-50 font-sans relative">
-            {/* Sidebar */}
-            <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+        {/* Sidebar - Fixed */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-            {/* Main Content */}
-            <div className="flex-1 overflow-auto">
-                {/* Header */}
-                <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center">
-                            <button
-                                onClick={() => setSidebarOpen(true)}
-                                className="lg:hidden mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                            >
-                                <MoreVertical className="w-5 h-5 text-gray-600" />
-                            </button>
-                            <button
-                                onClick={() => navigate("/admin-dashboard")}
-                                className="mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                                title="Back to Dashboard"
-                            >
-                                <ArrowLeft className="w-5 h-5 text-gray-600" />
-                            </button>
-                            <div>
-                                <h1 className="text-2xl font-bold text-gray-800">Vehicle Models</h1>
-                                <p className="text-sm text-gray-600 mt-1">
-                                    Manage all vehicle models in the system
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
-                                <span className="font-semibold">{filteredModels.length}</span> model(s)
-                            </div>
-                            <button
-                                onClick={() => setIsCreateModalOpen(true)}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium"
-                            >
-                                <Plus className="w-5 h-5" />
-                                <span>Add Model</span>
-                            </button>
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Header - Fixed */}
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center">
+                        <button
+                            onClick={() => setSidebarOpen(true)}
+                            className="lg:hidden mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                            <MoreVertical className="w-5 h-5 text-gray-600" />
+                        </button>
+                        <button
+                            onClick={() => navigate("/admin-dashboard")}
+                            className="mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                            title="Back to Dashboard"
+                        >
+                            <ArrowLeft className="w-5 h-5 text-gray-600" />
+                        </button>
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800">Vehicle Models</h1>
+                            <p className="text-sm text-gray-600 mt-1">
+                                Manage all vehicle models in the system
+                            </p>
                         </div>
                     </div>
+                    <div className="flex items-center gap-4">
+                        <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
+                            <span className="font-semibold">{filteredModels.length}</span> model(s)
+                        </div>
+                        <button
+                            onClick={() => setIsCreateModalOpen(true)}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium"
+                        >
+                            <Plus className="w-5 h-5" />
+                            <span>Add Model</span>
+                        </button>
+                    </div>
                 </div>
+            </div>
 
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto">
                 {/* Search and Filters */}
                 <div className="px-6 pt-6">
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
@@ -1035,8 +1037,194 @@ const VehicleModelManagement: React.FC = () => {
                     )}
                 </div>
             </div>
+        </div>
 
-            {/* View Vehicle Model Modal - Centered */}
+        {/* Modals remain exactly the same - they are fixed position overlays */}
+        {/* View Vehicle Model Modal */}
+        {isViewModalOpen && selectedModel && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                {/* Modal content same as before */}
+                <div
+                    className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+                    onClick={() => setIsViewModalOpen(false)}
+                />
+                <div className="relative bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-800">Vehicle Model Details</h2>
+                            <p className="text-sm text-gray-600">Complete model information</p>
+                        </div>
+                        <button
+                            onClick={() => setIsViewModalOpen(false)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <X className="w-5 h-5 text-gray-600" />
+                        </button>
+                    </div>
+
+                    <div className="overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 80px)' }}>
+                        {/* Modal content - keep everything exactly the same */}
+                        <div className="flex flex-col lg:flex-row gap-8 mb-8">
+                            {/* Images Section */}
+                            <div className="lg:w-2/5">
+                                <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6">
+                                    {selectedModel.images && selectedModel.images.length > 0 ? (
+                                        <div className="space-y-4">
+                                            <div className="relative h-64 rounded-lg overflow-hidden border border-gray-300">
+                                                <img
+                                                    src={selectedModel.images[0]}
+                                                    alt={`${selectedModel.make} ${selectedModel.model}`}
+                                                    className="w-full h-full object-contain cursor-pointer hover:opacity-95 transition-opacity"
+                                                    onClick={() => openImageViewer(selectedModel.images![0])}
+                                                />
+                                                <button
+                                                    onClick={() => openImageViewer(selectedModel.images![0])}
+                                                    className="absolute bottom-2 right-2 bg-white/80 hover:bg-white px-2 py-1 rounded text-sm text-gray-700 hover:text-gray-900 transition-colors flex items-center gap-1"
+                                                >
+                                                    <Maximize2 className="w-3 h-3" />
+                                                    View Full Size
+                                                </button>
+                                            </div>
+
+                                            {selectedModel.images.length > 1 && (
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-700 mb-2">More Images</p>
+                                                    <div className="grid grid-cols-4 gap-2">
+                                                        {selectedModel.images.slice(1).map((img, index) => (
+                                                            <button
+                                                                key={index}
+                                                                onClick={() => openImageViewer(img)}
+                                                                className="aspect-square rounded border border-gray-300 overflow-hidden hover:border-[#1EA2E4] transition-colors"
+                                                            >
+                                                                <img
+                                                                    src={img}
+                                                                    alt={`${selectedModel.make} ${selectedModel.model} - ${index + 2}`}
+                                                                    className="w-full h-full object-cover"
+                                                                />
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="h-64 flex flex-col items-center justify-center text-gray-400">
+                                            <Car className="w-16 h-16 mb-4" />
+                                            <p>No images available</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Details Section */}
+                            <div className="lg:w-3/5">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="bg-gray-50 rounded-lg p-4">
+                                        <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Basic Information</h4>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <p className="text-xs text-gray-500">Make</p>
+                                                <p className="text-gray-900 font-medium text-lg">{selectedModel.make}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500">Model</p>
+                                                <p className="text-gray-900 font-medium text-lg">{selectedModel.model}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500">Year</p>
+                                                <p className="text-gray-900 font-medium">{selectedModel.year}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500">Class</p>
+                                                <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getClassColor(selectedModel.class)}`}>
+                                                    {selectedModel.class || "N/A"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-gray-50 rounded-lg p-4">
+                                        <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Specifications</h4>
+                                        <div className="space-y-3">
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Transmission</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <Cog className="w-4 h-4 text-gray-400" />
+                                                        <p className="text-gray-900 font-medium">{selectedModel.transmission || "N/A"}</p>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Fuel Type</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <Fuel className="w-4 h-4 text-gray-400" />
+                                                        <p className="text-gray-900 font-medium">{selectedModel.fuel_type || "N/A"}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Seats</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <Users className="w-4 h-4 text-gray-400" />
+                                                        <p className="text-gray-900 font-medium">{selectedModel.seats || "N/A"}</p>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Doors</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <DoorOpen className="w-4 h-4 text-gray-400" />
+                                                        <p className="text-gray-900 font-medium">{selectedModel.doors || "N/A"}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {selectedModel.features && selectedModel.features.length > 0 && (
+                                        <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
+                                            <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Features</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedModel.features.map((feature, index) => (
+                                                    <span key={index} className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg flex items-center gap-2">
+                                                        <CheckCircle className="w-3 h-3 text-green-500" />
+                                                        {feature}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="border-t border-gray-200 bg-gray-50 px-6 py-4">
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setIsViewModalOpen(false)}
+                                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setIsViewModalOpen(false);
+                                    setIsEditModalOpen(true);
+                                }}
+                                className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium"
+                            >
+                                Edit Model
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Keep all other modals exactly the same - Create Modal, Edit Modal, Image Viewer, Delete Confirmation, Snackbar */}
+        {/* ... rest of your modals remain unchanged ... */}
+         {/* View Vehicle Model Modal - Centered */}
             {isViewModalOpen && selectedModel && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div
@@ -2019,8 +2207,8 @@ const VehicleModelManagement: React.FC = () => {
                     </div>
                 </div>
             )}
-        </div>
-    );
-};
+    </div>
+);
+}
 
 export default VehicleModelManagement;

@@ -738,51 +738,53 @@ const VehicleUnitManagement: React.FC = () => {
     };
 
     return (
-        <div className="flex min-h-screen bg-gray-50 font-sans relative">
-            {/* Sidebar */}
-            <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+        {/* Sidebar - Fixed */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-            {/* Main Content */}
-            <div className="flex-1 overflow-auto">
-                {/* Header */}
-                <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center">
-                            <button
-                                onClick={() => setSidebarOpen(true)}
-                                className="lg:hidden mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                            >
-                                <MoreVertical className="w-5 h-5 text-gray-600" />
-                            </button>
-                            <button
-                                onClick={() => navigate("/admin-dashboard")}
-                                className="mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                                title="Back to Dashboard"
-                            >
-                                <ArrowLeft className="w-5 h-5 text-gray-600" />
-                            </button>
-                            <div>
-                                <h1 className="text-2xl font-bold text-gray-800">Vehicle Units</h1>
-                                <p className="text-sm text-gray-600 mt-1">
-                                    Manage all vehicle units in the system
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
-                                <span className="font-semibold">{filteredUnits.length}</span> unit(s)
-                            </div>
-                            <button
-                                onClick={() => setIsCreateModalOpen(true)}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium"
-                            >
-                                <Plus className="w-5 h-5" />
-                                <span>Add Unit</span>
-                            </button>
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Header - Fixed */}
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center">
+                        <button
+                            onClick={() => setSidebarOpen(true)}
+                            className="lg:hidden mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                            <MoreVertical className="w-5 h-5 text-gray-600" />
+                        </button>
+                        <button
+                            onClick={() => navigate("/admin-dashboard")}
+                            className="mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                            title="Back to Dashboard"
+                        >
+                            <ArrowLeft className="w-5 h-5 text-gray-600" />
+                        </button>
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800">Vehicle Units</h1>
+                            <p className="text-sm text-gray-600 mt-1">
+                                Manage all vehicle units in the system
+                            </p>
                         </div>
                     </div>
+                    <div className="flex items-center gap-4">
+                        <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
+                            <span className="font-semibold">{filteredUnits.length}</span> unit(s)
+                        </div>
+                        <button
+                            onClick={() => setIsCreateModalOpen(true)}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium"
+                        >
+                            <Plus className="w-5 h-5" />
+                            <span>Add Unit</span>
+                        </button>
+                    </div>
                 </div>
+            </div>
 
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto">
                 {/* Search and Filters */}
                 <div className="px-6 pt-6">
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
@@ -1187,1100 +1189,1054 @@ const VehicleUnitManagement: React.FC = () => {
                     )}
                 </div>
             </div>
+        </div>
 
-            {/* View Vehicle Unit Modal - Centered */}
-            {isViewModalOpen && selectedUnit && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-                        onClick={() => setIsViewModalOpen(false)}
-                    />
-                    <div className="relative bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
-                        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-xl font-bold text-gray-800">Vehicle Unit Details</h2>
-                                <p className="text-sm text-gray-600">Complete unit information</p>
-                            </div>
-                            <button
-                                onClick={() => setIsViewModalOpen(false)}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                                <X className="w-5 h-5 text-gray-600" />
-                            </button>
+        {/* View Vehicle Unit Modal - Centered */}
+        {isViewModalOpen && selectedUnit && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div
+                    className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+                    onClick={() => setIsViewModalOpen(false)}
+                />
+                <div className="relative bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-800">Vehicle Unit Details</h2>
+                            <p className="text-sm text-gray-600">Complete unit information</p>
                         </div>
+                        <button
+                            onClick={() => setIsViewModalOpen(false)}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <X className="w-5 h-5 text-gray-600" />
+                        </button>
+                    </div>
 
-                        <div className="overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 80px)' }}>
-                            <div className="flex flex-col lg:flex-row gap-8 mb-8">
-                                {/* Photos Section */}
-                                <div className="lg:w-2/5">
-                                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6">
-                                        {selectedUnit.photos && selectedUnit.photos.length > 0 ? (
-                                            <div className="space-y-4">
-                                                {/* Main Photo */}
-                                                <div className="relative h-64 rounded-lg overflow-hidden border border-gray-300">
-                                                    <img
-                                                        src={selectedUnit.photos[0]}
-                                                        alt={`${selectedUnit.vin} - ${selectedUnit.plate_number}`}
-                                                        className="w-full h-full object-contain cursor-pointer hover:opacity-95 transition-opacity"
-                                                        onClick={() => openImageViewer(selectedUnit.photos![0])}
-                                                    />
-                                                    <button
-                                                        onClick={() => openImageViewer(selectedUnit.photos![0])}
-                                                        className="absolute bottom-2 right-2 bg-white/80 hover:bg-white px-2 py-1 rounded text-sm text-gray-700 hover:text-gray-900 transition-colors flex items-center gap-1"
-                                                    >
-                                                        <Maximize2 className="w-3 h-3" />
-                                                        View Full Size
-                                                    </button>
+                    <div className="overflow-y-auto p-6" style={{ maxHeight: 'calc(90vh - 80px)' }}>
+                        <div className="flex flex-col lg:flex-row gap-8 mb-8">
+                            {/* Photos Section */}
+                            <div className="lg:w-2/5">
+                                <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6">
+                                    {selectedUnit.photos && selectedUnit.photos.length > 0 ? (
+                                        <div className="space-y-4">
+                                            {/* Main Photo */}
+                                            <div className="relative h-64 rounded-lg overflow-hidden border border-gray-300">
+                                                <img
+                                                    src={selectedUnit.photos[0]}
+                                                    alt={`${selectedUnit.vin} - ${selectedUnit.plate_number}`}
+                                                    className="w-full h-full object-contain cursor-pointer hover:opacity-95 transition-opacity"
+                                                    onClick={() => openImageViewer(selectedUnit.photos![0])}
+                                                />
+                                                <button
+                                                    onClick={() => openImageViewer(selectedUnit.photos![0])}
+                                                    className="absolute bottom-2 right-2 bg-white/80 hover:bg-white px-2 py-1 rounded text-sm text-gray-700 hover:text-gray-900 transition-colors flex items-center gap-1"
+                                                >
+                                                    <Maximize2 className="w-3 h-3" />
+                                                    View Full Size
+                                                </button>
+                                            </div>
+
+                                            {/* Thumbnails */}
+                                            {selectedUnit.photos.length > 1 && (
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-700 mb-2">More Photos</p>
+                                                    <div className="grid grid-cols-4 gap-2">
+                                                        {selectedUnit.photos.slice(1).map((img, index) => (
+                                                            <button
+                                                                key={index}
+                                                                onClick={() => openImageViewer(img)}
+                                                                className="aspect-square rounded border border-gray-300 overflow-hidden hover:border-[#1EA2E4] transition-colors"
+                                                            >
+                                                                <img
+                                                                    src={img}
+                                                                    alt={`${selectedUnit.vin} - ${selectedUnit.plate_number} - ${index + 2}`}
+                                                                    className="w-full h-full object-cover"
+                                                                />
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                 </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="h-64 flex flex-col items-center justify-center text-gray-400">
+                                            <Car className="w-16 h-16 mb-4" />
+                                            <p>No photos available</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
 
-                                                {/* Thumbnails */}
-                                                {selectedUnit.photos.length > 1 && (
+                            {/* Details Section */}
+                            <div className="lg:w-3/5">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* Basic Info */}
+                                    <div className="bg-gray-50 rounded-lg p-4">
+                                        <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Basic Information</h4>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <p className="text-xs text-gray-500">VIN</p>
+                                                <p className="text-gray-900 font-medium text-lg">{selectedUnit.vin}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500">Plate Number</p>
+                                                <p className="text-gray-900 font-medium text-lg">{selectedUnit.plate_number}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500">Color</p>
+                                                <p className="text-gray-900 font-medium">{selectedUnit.color || "N/A"}</p>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Status</p>
+                                                    <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedUnit.status)}`}>
+                                                        {selectedUnit.status || "N/A"}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Availability</p>
+                                                    <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getAvailabilityColor(selectedUnit.availability_state)}`}>
+                                                        {selectedUnit.availability_state || "N/A"}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Specifications */}
+                                    <div className="bg-gray-50 rounded-lg p-4">
+                                        <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Specifications</h4>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <p className="text-xs text-gray-500">Vehicle Model</p>
+                                                <p className="text-gray-900 font-medium">{getVehicleModelName(selectedUnit)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500">Branch</p>
+                                                <p className="text-gray-900 font-medium">{getBranchName(selectedUnit)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-500">Odometer</p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <Gauge className="w-4 h-4 text-gray-400" />
+                                                    <p className="text-gray-900 font-medium">{formatOdometer(selectedUnit.odometer_km)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Seats</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <Users className="w-4 h-4 text-gray-400" />
+                                                        <p className="text-gray-900 font-medium">{selectedUnit.metadata?.seats || "N/A"}</p>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-gray-500">Doors</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <DoorOpen className="w-4 h-4 text-gray-400" />
+                                                        <p className="text-gray-900 font-medium">{selectedUnit.metadata?.doors || "N/A"}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Last Service */}
+                                    {(selectedUnit.last_service_at || selectedUnit.last_service_odometer_km) && (
+                                        <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
+                                            <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Last Service</h4>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                {selectedUnit.last_service_at && (
                                                     <div>
-                                                        <p className="text-sm font-medium text-gray-700 mb-2">More Photos</p>
-                                                        <div className="grid grid-cols-4 gap-2">
-                                                            {selectedUnit.photos.slice(1).map((img, index) => (
-                                                                <button
-                                                                    key={index}
-                                                                    onClick={() => openImageViewer(img)}
-                                                                    className="aspect-square rounded border border-gray-300 overflow-hidden hover:border-[#1EA2E4] transition-colors"
-                                                                >
-                                                                    <img
-                                                                        src={img}
-                                                                        alt={`${selectedUnit.vin} - ${selectedUnit.plate_number} - ${index + 2}`}
-                                                                        className="w-full h-full object-cover"
-                                                                    />
-                                                                </button>
-                                                            ))}
+                                                        <p className="text-xs text-gray-500">Date</p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <Calendar className="w-4 h-4 text-gray-400" />
+                                                            <p className="text-gray-900 font-medium">{formatDate(selectedUnit.last_service_at)}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {selectedUnit.last_service_odometer_km && (
+                                                    <div>
+                                                        <p className="text-xs text-gray-500">Odometer at Service</p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <Gauge className="w-4 h-4 text-gray-400" />
+                                                            <p className="text-gray-900 font-medium">{selectedUnit.last_service_odometer_km.toLocaleString()} km</p>
                                                         </div>
                                                     </div>
                                                 )}
                                             </div>
-                                        ) : (
-                                            <div className="h-64 flex flex-col items-center justify-center text-gray-400">
-                                                <Car className="w-16 h-16 mb-4" />
-                                                <p>No photos available</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                                        </div>
+                                    )}
 
-                                {/* Details Section */}
-                                <div className="lg:w-3/5">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {/* Basic Info */}
-                                        <div className="bg-gray-50 rounded-lg p-4">
-                                            <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Basic Information</h4>
-                                            <div className="space-y-3">
-                                                <div>
-                                                    <p className="text-xs text-gray-500">VIN</p>
-                                                    <p className="text-gray-900 font-medium text-lg">{selectedUnit.vin}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Plate Number</p>
-                                                    <p className="text-gray-900 font-medium text-lg">{selectedUnit.plate_number}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Color</p>
-                                                    <p className="text-gray-900 font-medium">{selectedUnit.color || "N/A"}</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <div>
-                                                        <p className="text-xs text-gray-500">Status</p>
-                                                        <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedUnit.status)}`}>
-                                                            {selectedUnit.status || "N/A"}
-                                                        </span>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs text-gray-500">Availability</p>
-                                                        <span className={`px-3 py-1 text-sm font-semibold rounded-full ${getAvailabilityColor(selectedUnit.availability_state)}`}>
-                                                            {selectedUnit.availability_state || "N/A"}
-                                                        </span>
-                                                    </div>
-                                                </div>
+                                    {/* Features - Full Width */}
+                                    {selectedUnit.metadata?.features && selectedUnit.metadata.features.length > 0 && (
+                                        <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
+                                            <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Features</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedUnit.metadata.features.map((feature, index) => (
+                                                    <span
+                                                        key={index}
+                                                        className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg flex items-center gap-2"
+                                                    >
+                                                        <CheckCircle className="w-3 h-3 text-green-500" />
+                                                        {feature}
+                                                    </span>
+                                                ))}
                                             </div>
                                         </div>
+                                    )}
 
-                                        {/* Specifications */}
-                                        <div className="bg-gray-50 rounded-lg p-4">
-                                            <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Specifications</h4>
+                                    {/* Additional Metadata */}
+                                    {(selectedUnit.metadata?.gps_device_id || selectedUnit.metadata?.notes) && (
+                                        <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
+                                            <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Additional Information</h4>
                                             <div className="space-y-3">
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Vehicle Model</p>
-                                                    <p className="text-gray-900 font-medium">{getVehicleModelName(selectedUnit)}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Branch</p>
-                                                    <p className="text-gray-900 font-medium">{getBranchName(selectedUnit)}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Odometer</p>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <Gauge className="w-4 h-4 text-gray-400" />
-                                                        <p className="text-gray-900 font-medium">{formatOdometer(selectedUnit.odometer_km)}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-3">
+                                                {selectedUnit.metadata?.gps_device_id && (
                                                     <div>
-                                                        <p className="text-xs text-gray-500">Seats</p>
+                                                        <p className="text-xs text-gray-500">GPS Device ID</p>
                                                         <div className="flex items-center gap-2 mt-1">
-                                                            <Users className="w-4 h-4 text-gray-400" />
-                                                            <p className="text-gray-900 font-medium">{selectedUnit.metadata?.seats || "N/A"}</p>
+                                                            <Database className="w-4 h-4 text-gray-400" />
+                                                            <p className="text-gray-900 font-medium">{selectedUnit.metadata.gps_device_id}</p>
                                                         </div>
                                                     </div>
+                                                )}
+                                                {selectedUnit.metadata?.notes && (
                                                     <div>
-                                                        <p className="text-xs text-gray-500">Doors</p>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <DoorOpen className="w-4 h-4 text-gray-400" />
-                                                            <p className="text-gray-900 font-medium">{selectedUnit.metadata?.doors || "N/A"}</p>
-                                                        </div>
+                                                        <p className="text-xs text-gray-500">Notes</p>
+                                                        <p className="text-gray-700 text-sm mt-1 bg-white p-3 rounded border border-gray-200">
+                                                            {selectedUnit.metadata.notes}
+                                                        </p>
                                                     </div>
-                                                </div>
+                                                )}
                                             </div>
                                         </div>
-
-                                        {/* Last Service */}
-                                        {(selectedUnit.last_service_at || selectedUnit.last_service_odometer_km) && (
-                                            <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
-                                                <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Last Service</h4>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    {selectedUnit.last_service_at && (
-                                                        <div>
-                                                            <p className="text-xs text-gray-500">Date</p>
-                                                            <div className="flex items-center gap-2 mt-1">
-                                                                <Calendar className="w-4 h-4 text-gray-400" />
-                                                                <p className="text-gray-900 font-medium">{formatDate(selectedUnit.last_service_at)}</p>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {selectedUnit.last_service_odometer_km && (
-                                                        <div>
-                                                            <p className="text-xs text-gray-500">Odometer at Service</p>
-                                                            <div className="flex items-center gap-2 mt-1">
-                                                                <Gauge className="w-4 h-4 text-gray-400" />
-                                                                <p className="text-gray-900 font-medium">{selectedUnit.last_service_odometer_km.toLocaleString()} km</p>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Features - Full Width */}
-                                        {selectedUnit.metadata?.features && selectedUnit.metadata.features.length > 0 && (
-                                            <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
-                                                <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Features</h4>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {selectedUnit.metadata.features.map((feature, index) => (
-                                                        <span
-                                                            key={index}
-                                                            className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg flex items-center gap-2"
-                                                        >
-                                                            <CheckCircle className="w-3 h-3 text-green-500" />
-                                                            {feature}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Additional Metadata */}
-                                        {(selectedUnit.metadata?.gps_device_id || selectedUnit.metadata?.notes) && (
-                                            <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
-                                                <h4 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">Additional Information</h4>
-                                                <div className="space-y-3">
-                                                    {selectedUnit.metadata?.gps_device_id && (
-                                                        <div>
-                                                            <p className="text-xs text-gray-500">GPS Device ID</p>
-                                                            <div className="flex items-center gap-2 mt-1">
-                                                                <Database className="w-4 h-4 text-gray-400" />
-                                                                <p className="text-gray-900 font-medium">{selectedUnit.metadata.gps_device_id}</p>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {selectedUnit.metadata?.notes && (
-                                                        <div>
-                                                            <p className="text-xs text-gray-500">Notes</p>
-                                                            <p className="text-gray-700 text-sm mt-1 bg-white p-3 rounded border border-gray-200">
-                                                                {selectedUnit.metadata.notes}
-                                                            </p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
+                                    )}
                                 </div>
-                            </div>
-                        </div>
-
-                        <div className="border-t border-gray-200 bg-gray-50 px-6 py-4">
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    onClick={() => setIsViewModalOpen(false)}
-                                    className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                >
-                                    Close
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setIsViewModalOpen(false);
-                                        setIsEditModalOpen(true);
-                                    }}
-                                    className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium"
-                                >
-                                    Edit Unit
-                                </button>
                             </div>
                         </div>
                     </div>
+
+                    <div className="border-t border-gray-200 bg-gray-50 px-6 py-4">
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setIsViewModalOpen(false)}
+                                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setIsViewModalOpen(false);
+                                    setIsEditModalOpen(true);
+                                }}
+                                className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium"
+                            >
+                                Edit Unit
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            )}
+            </div>
+        )}
 
-            {/* Create Vehicle Unit Modal - Side Modal (Wider) */}
-            {isCreateModalOpen && (
-                <div className="fixed inset-0 z-50 overflow-hidden">
-                    <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-                        onClick={() => setIsCreateModalOpen(false)}
-                    />
-                    <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
-                        <div className="relative w-screen max-w-5xl"> {/* Changed from max-w-3xl to max-w-5xl */}
-                            <div className="h-full bg-white shadow-2xl overflow-y-auto">
-                                <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-gray-800">Create New Vehicle Unit</h2>
-                                        <p className="text-sm text-gray-600">Add a new vehicle unit to the system</p>
-                                    </div>
-                                    <button
-                                        onClick={() => setIsCreateModalOpen(false)}
-                                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                    >
-                                        <X className="w-5 h-5 text-gray-600" />
-                                    </button>
+        {/* Create Vehicle Unit Modal - Side Modal (Wider) */}
+        {isCreateModalOpen && (
+            <div className="fixed inset-0 z-50 overflow-hidden">
+                <div
+                    className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+                    onClick={() => setIsCreateModalOpen(false)}
+                />
+                <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
+                    <div className="relative w-screen max-w-5xl">
+                        <div className="h-full bg-white shadow-2xl overflow-y-auto">
+                            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-800">Create New Vehicle Unit</h2>
+                                    <p className="text-sm text-gray-600">Add a new vehicle unit to the system</p>
                                 </div>
+                                <button
+                                    onClick={() => setIsCreateModalOpen(false)}
+                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-gray-600" />
+                                </button>
+                            </div>
 
-                                <div className="p-6 space-y-6">
-                                    {/* Basic Information */}
-                                    <div className="space-y-4">
-                                        <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Basic Information</h3>
+                            <div className="p-6 space-y-6">
+                                {/* Basic Information */}
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Basic Information</h3>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    VIN *
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={createForm.vin}
-                                                    onChange={(e) => setCreateForm(prev => ({ ...prev, vin: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    placeholder="e.g., 1HGBH41JXMN109186"
-                                                    required
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Plate Number *
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={createForm.plate_number}
-                                                    onChange={(e) => setCreateForm(prev => ({ ...prev, plate_number: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    placeholder="e.g., ABC123"
-                                                    required
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Vehicle Model *
-                                                </label>
-                                                <select
-                                                    value={createForm.vehicle_model_id}
-                                                    onChange={(e) => setCreateForm(prev => ({ ...prev, vehicle_model_id: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    disabled={loadingModels}
-                                                    required
-                                                >
-                                                    <option value="">Select a vehicle model</option>
-                                                    {vehicleModels.map(model => (
-                                                        <option key={model._id} value={model._id}>
-                                                            {model.make} {model.model} ({model.year}) - {model.class}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                {loadingModels && (
-                                                    <p className="text-xs text-gray-500 mt-1">Loading models...</p>
-                                                )}
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Branch *
-                                                </label>
-                                                <select
-                                                    value={createForm.branch_id}
-                                                    onChange={(e) => setCreateForm(prev => ({ ...prev, branch_id: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    disabled={loadingBranches}
-                                                    required
-                                                >
-                                                    <option value="">Select a branch</option>
-                                                    {branches.map(branch => (
-                                                        <option key={branch._id} value={branch._id}>
-                                                            {branch.name} ({branch.code}) - {branch.address.city}, {branch.address.country}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                {loadingBranches && (
-                                                    <p className="text-xs text-gray-500 mt-1">Loading branches...</p>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Odometer (km)
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    max="1000000"
-                                                    value={createForm.odometer_km}
-                                                    onChange={(e) => setCreateForm(prev => ({ ...prev, odometer_km: parseInt(e.target.value) || 0 }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Color
-                                                </label>
-                                                <select
-                                                    value={createForm.color}
-                                                    onChange={(e) => setCreateForm(prev => ({ ...prev, color: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                >
-                                                    <option value="">Select color</option>
-                                                    {COLOR_OPTIONS.map(color => (
-                                                        <option key={color} value={color.toLowerCase()}>{color}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Seats
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    max="20"
-                                                    value={createForm.metadata?.seats || 5}
-                                                    onChange={(e) => setCreateForm(prev => ({
-                                                        ...prev,
-                                                        metadata: {
-                                                            ...prev.metadata,
-                                                            seats: parseInt(e.target.value) || 5
-                                                        }
-                                                    }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Status
-                                                </label>
-                                                <select
-                                                    value={createForm.status}
-                                                    onChange={(e) => setCreateForm(prev => ({ ...prev, status: e.target.value as VehicleStatus }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                >
-                                                    {STATUS_OPTIONS.map(status => (
-                                                        <option key={status} value={status}>{status}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Availability
-                                                </label>
-                                                <select
-                                                    value={createForm.availability_state}
-                                                    onChange={(e) => setCreateForm(prev => ({ ...prev, availability_state: e.target.value as AvailabilityState }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                >
-                                                    {AVAILABILITY_OPTIONS.map(availability => (
-                                                        <option key={availability} value={availability}>{availability}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Doors
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    max="10"
-                                                    value={createForm.metadata?.doors || 4}
-                                                    onChange={(e) => setCreateForm(prev => ({
-                                                        ...prev,
-                                                        metadata: {
-                                                            ...prev.metadata,
-                                                            doors: parseInt(e.target.value) || 4
-                                                        }
-                                                    }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* GPS Device ID */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    GPS Device ID
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={createForm.metadata?.gps_device_id || ""}
-                                                    onChange={(e) => setCreateForm(prev => ({
-                                                        ...prev,
-                                                        metadata: {
-                                                            ...prev.metadata,
-                                                            gps_device_id: e.target.value
-                                                        }
-                                                    }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    placeholder="e.g., GPS-123456"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Notes */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Notes
+                                                VIN *
                                             </label>
-                                            <textarea
-                                                value={createForm.metadata?.notes || ""}
+                                            <input
+                                                type="text"
+                                                value={createForm.vin}
+                                                onChange={(e) => setCreateForm(prev => ({ ...prev, vin: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                                placeholder="e.g., 1HGBH41JXMN109186"
+                                                required
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Plate Number *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={createForm.plate_number}
+                                                onChange={(e) => setCreateForm(prev => ({ ...prev, plate_number: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                                placeholder="e.g., ABC123"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Vehicle Model *
+                                            </label>
+                                            <select
+                                                value={createForm.vehicle_model_id}
+                                                onChange={(e) => setCreateForm(prev => ({ ...prev, vehicle_model_id: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                                disabled={loadingModels}
+                                                required
+                                            >
+                                                <option value="">Select a vehicle model</option>
+                                                {vehicleModels.map(model => (
+                                                    <option key={model._id} value={model._id}>
+                                                        {model.make} {model.model} ({model.year}) - {model.class}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {loadingModels && (
+                                                <p className="text-xs text-gray-500 mt-1">Loading models...</p>
+                                            )}
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Branch *
+                                            </label>
+                                            <select
+                                                value={createForm.branch_id}
+                                                onChange={(e) => setCreateForm(prev => ({ ...prev, branch_id: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                                disabled={loadingBranches}
+                                                required
+                                            >
+                                                <option value="">Select a branch</option>
+                                                {branches.map(branch => (
+                                                    <option key={branch._id} value={branch._id}>
+                                                        {branch.name} ({branch.code}) - {branch.address.city}, {branch.address.country}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {loadingBranches && (
+                                                <p className="text-xs text-gray-500 mt-1">Loading branches...</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Odometer (km)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="1000000"
+                                                value={createForm.odometer_km}
+                                                onChange={(e) => setCreateForm(prev => ({ ...prev, odometer_km: parseInt(e.target.value) || 0 }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Color
+                                            </label>
+                                            <select
+                                                value={createForm.color}
+                                                onChange={(e) => setCreateForm(prev => ({ ...prev, color: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            >
+                                                <option value="">Select color</option>
+                                                {COLOR_OPTIONS.map(color => (
+                                                    <option key={color} value={color.toLowerCase()}>{color}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Seats
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="20"
+                                                value={createForm.metadata?.seats || 5}
                                                 onChange={(e) => setCreateForm(prev => ({
                                                     ...prev,
                                                     metadata: {
                                                         ...prev.metadata,
-                                                        notes: e.target.value
+                                                        seats: parseInt(e.target.value) || 5
                                                     }
                                                 }))}
                                                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                rows={3}
-                                                placeholder="Additional notes about this vehicle unit..."
                                             />
                                         </div>
                                     </div>
 
-                                    {/* Photo Upload Section */}
-                                    <div className="space-y-4 pt-6 border-t border-gray-200">
-                                        <h3 className="text-lg font-semibold text-gray-800">Photos</h3>
-
-                                        <div className="space-y-4">
-                                            <input
-                                                ref={fileInputRef}
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={handleFileSelect}
-                                                multiple
-                                                className="hidden"
-                                            />
-
-                                            {/* Upload Area */}
-                                            <div
-                                                onClick={() => fileInputRef.current?.click()}
-                                                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-[#1EA2E4] transition-colors"
-                                            >
-                                                <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                                                <p className="text-lg font-medium text-gray-700 mb-2">Upload Vehicle Photos</p>
-                                                <p className="text-sm text-gray-600">Drag & drop or click to browse</p>
-                                                <p className="text-xs text-gray-500 mt-2">Supports: JPG, PNG, WebP (Max 5MB per file)</p>
-                                            </div>
-
-                                            {/* Upload Progress */}
-                                            {isUploading && (
-                                                <div className="space-y-2">
-                                                    <div className="flex justify-between text-sm text-gray-600">
-                                                        <span>Uploading photos...</span>
-                                                        <span>{uploadProgress}%</span>
-                                                    </div>
-                                                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-[#1EA2E4] transition-all duration-300"
-                                                            style={{ width: `${uploadProgress}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Photo Previews */}
-                                            {photoPreviews.length > 0 && (
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <p className="text-sm font-medium text-gray-700">
-                                                            Selected Photos ({photoPreviews.length})
-                                                        </p>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setPhotoFiles([]);
-                                                                setPhotoPreviews([]);
-                                                                if (fileInputRef.current) fileInputRef.current.value = '';
-                                                            }}
-                                                            className="text-sm text-red-600 hover:text-red-800"
-                                                        >
-                                                            Clear All
-                                                        </button>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                                        {photoPreviews.map((preview, index) => (
-                                                            <div key={index} className="relative group">
-                                                                <div className="aspect-square rounded-lg border border-gray-300 overflow-hidden">
-                                                                    <img
-                                                                        src={preview}
-                                                                        alt={`Preview ${index + 1}`}
-                                                                        className="w-full h-full object-cover"
-                                                                    />
-                                                                </div>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => removePhoto(index)}
-                                                                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                                                                >
-                                                                    <X className="w-3 h-3" />
-                                                                </button>
-                                                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-2 py-1 truncate">
-                                                                    {photoFiles[index]?.name || `Photo ${index + 1}`}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Features Section */}
-                                    <div className="space-y-4 pt-6 border-t border-gray-200">
-                                        <h3 className="text-lg font-semibold text-gray-800">Features</h3>
-                                        <p className="text-sm text-gray-600">Select features available in this vehicle unit</p>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto p-2">
-                                            {METADATA_FEATURE_OPTIONS.map(feature => (
-                                                <div key={feature} className="flex items-center">
-                                                    <input
-                                                        type="checkbox"
-                                                        id={`feature-${feature}`}
-                                                        checked={createForm.metadata?.features?.includes(feature) || false}
-                                                        onChange={() => toggleMetadataFeature(feature, 'create')}
-                                                        className="h-4 w-4 text-[#1EA2E4] focus:ring-[#1EA2E4] border-gray-300 rounded"
-                                                    />
-                                                    <label htmlFor={`feature-${feature}`} className="ml-2 text-sm text-gray-700">
-                                                        {feature}
-                                                    </label>
-                                                </div>
-                                            ))}
-                                        </div>
-
-                                        {createForm.metadata?.features && createForm.metadata.features.length > 0 && (
-                                            <div className="mt-4">
-                                                <p className="text-sm text-gray-600 mb-2">Selected Features ({createForm.metadata.features.length}):</p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {createForm.metadata.features.map(feature => (
-                                                        <span
-                                                            key={feature}
-                                                            className="px-3 py-1 bg-[#1EA2E4]/10 text-[#1A8BC9] text-sm rounded-full flex items-center gap-1"
-                                                        >
-                                                            {feature}
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => toggleMetadataFeature(feature, 'create')}
-                                                                className="text-[#1A8BC9] hover:text-red-600"
-                                                            >
-                                                                <X className="w-3 h-3" />
-                                                            </button>
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
-                                    <div className="flex justify-end gap-3">
-                                        <button
-                                            onClick={() => setIsCreateModalOpen(false)}
-                                            className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleCreateUnit}
-                                            disabled={!createForm.vin || !createForm.plate_number || !createForm.vehicle_model_id || !createForm.branch_id || isUploading}
-                                            className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {isUploading ? 'Uploading...' : 'Create Vehicle Unit'}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Edit Vehicle Unit Modal - Side Modal (Wider) */}
-            {isEditModalOpen && selectedUnit && (
-                <div className="fixed inset-0 z-50 overflow-hidden">
-                    <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-                        onClick={() => setIsEditModalOpen(false)}
-                    />
-                    <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
-                        <div className="relative w-screen max-w-5xl"> {/* Changed from max-w-3xl to max-w-5xl */}
-                            <div className="h-full bg-white shadow-2xl overflow-y-auto">
-                                <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-gray-800">Edit Vehicle Unit</h2>
-                                        <p className="text-sm text-gray-600">Update unit information</p>
-                                    </div>
-                                    <button
-                                        onClick={() => setIsEditModalOpen(false)}
-                                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                    >
-                                        <X className="w-5 h-5 text-gray-600" />
-                                    </button>
-                                </div>
-
-                                <div className="p-6 space-y-6">
-                                    {/* Basic Information */}
-                                    <div className="space-y-4">
-                                        <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Basic Information</h3>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    VIN *
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={editForm.vin || ''}
-                                                    onChange={(e) => setEditForm(prev => ({ ...prev, vin: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    required
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Plate Number *
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={editForm.plate_number || ''}
-                                                    onChange={(e) => setEditForm(prev => ({ ...prev, plate_number: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    required
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Vehicle Model *
-                                                </label>
-                                                <select
-                                                    value={editForm.vehicle_model_id || ''}
-                                                    onChange={(e) => setEditForm(prev => ({ ...prev, vehicle_model_id: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    disabled={loadingModels}
-                                                    required
-                                                >
-                                                    <option value="">Select a vehicle model</option>
-                                                    {vehicleModels.map(model => (
-                                                        <option key={model._id} value={model._id}>
-                                                            {model.make} {model.model} ({model.year}) - {model.class}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Branch *
-                                                </label>
-                                                <select
-                                                    value={editForm.branch_id || ''}
-                                                    onChange={(e) => setEditForm(prev => ({ ...prev, branch_id: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    disabled={loadingBranches}
-                                                    required
-                                                >
-                                                    <option value="">Select a branch</option>
-                                                    {branches.map(branch => (
-                                                        <option key={branch._id} value={branch._id}>
-                                                            {branch.name} ({branch.code}) - {branch.address.city}, {branch.address.country}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Odometer (km)
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    max="1000000"
-                                                    value={editForm.odometer_km || ''}
-                                                    onChange={(e) => setEditForm(prev => ({ ...prev, odometer_km: parseInt(e.target.value) || 0 }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Color
-                                                </label>
-                                                <select
-                                                    value={editForm.color || ''}
-                                                    onChange={(e) => setEditForm(prev => ({ ...prev, color: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                >
-                                                    <option value="">Select color</option>
-                                                    {COLOR_OPTIONS.map(color => (
-                                                        <option key={color} value={color.toLowerCase()}>{color}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Seats
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    max="20"
-                                                    value={editForm.metadata?.seats || selectedUnit.metadata?.seats || 5}
-                                                    onChange={(e) => setEditForm(prev => ({
-                                                        ...prev,
-                                                        metadata: {
-                                                            ...prev.metadata,
-                                                            seats: parseInt(e.target.value) || 5
-                                                        }
-                                                    }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Status
-                                                </label>
-                                                <select
-                                                    value={editForm.status || ''}
-                                                    onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value as VehicleStatus }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                >
-                                                    {STATUS_OPTIONS.map(status => (
-                                                        <option key={status} value={status}>{status}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Availability
-                                                </label>
-                                                <select
-                                                    value={editForm.availability_state || ''}
-                                                    onChange={(e) => setEditForm(prev => ({ ...prev, availability_state: e.target.value as AvailabilityState }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                >
-                                                    {AVAILABILITY_OPTIONS.map(availability => (
-                                                        <option key={availability} value={availability}>{availability}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Doors
-                                                </label>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    max="10"
-                                                    value={editForm.metadata?.doors || selectedUnit.metadata?.doors || 4}
-                                                    onChange={(e) => setEditForm(prev => ({
-                                                        ...prev,
-                                                        metadata: {
-                                                            ...prev.metadata,
-                                                            doors: parseInt(e.target.value) || 4
-                                                        }
-                                                    }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* GPS Device ID */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    GPS Device ID
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={editForm.metadata?.gps_device_id || selectedUnit.metadata?.gps_device_id || ''}
-                                                    onChange={(e) => setEditForm(prev => ({
-                                                        ...prev,
-                                                        metadata: {
-                                                            ...prev.metadata,
-                                                            gps_device_id: e.target.value
-                                                        }
-                                                    }))}
-                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    placeholder="e.g., GPS-123456"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Notes */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Notes
+                                                Status
                                             </label>
-                                            <textarea
-                                                value={editForm.metadata?.notes || selectedUnit.metadata?.notes || ''}
-                                                onChange={(e) => setEditForm(prev => ({
+                                            <select
+                                                value={createForm.status}
+                                                onChange={(e) => setCreateForm(prev => ({ ...prev, status: e.target.value as VehicleStatus }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            >
+                                                {STATUS_OPTIONS.map(status => (
+                                                    <option key={status} value={status}>{status}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Availability
+                                            </label>
+                                            <select
+                                                value={createForm.availability_state}
+                                                onChange={(e) => setCreateForm(prev => ({ ...prev, availability_state: e.target.value as AvailabilityState }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            >
+                                                {AVAILABILITY_OPTIONS.map(availability => (
+                                                    <option key={availability} value={availability}>{availability}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Doors
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="10"
+                                                value={createForm.metadata?.doors || 4}
+                                                onChange={(e) => setCreateForm(prev => ({
                                                     ...prev,
                                                     metadata: {
                                                         ...prev.metadata,
-                                                        notes: e.target.value
+                                                        doors: parseInt(e.target.value) || 4
                                                     }
                                                 }))}
                                                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                rows={3}
-                                                placeholder="Additional notes about this vehicle unit..."
                                             />
                                         </div>
                                     </div>
 
-                                    {/* Photo Management Section */}
-                                    <div className="space-y-4 pt-6 border-t border-gray-200">
-                                        <h3 className="text-lg font-semibold text-gray-800">Photos</h3>
+                                    {/* GPS Device ID */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                GPS Device ID
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={createForm.metadata?.gps_device_id || ""}
+                                                onChange={(e) => setCreateForm(prev => ({
+                                                    ...prev,
+                                                    metadata: {
+                                                        ...prev.metadata,
+                                                        gps_device_id: e.target.value
+                                                    }
+                                                }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                                placeholder="e.g., GPS-123456"
+                                            />
+                                        </div>
+                                    </div>
 
-                                        {/* Existing Photos with Reordering */}
-                                        {editExistingPhotos.length > 0 && (
+                                    {/* Notes */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Notes
+                                        </label>
+                                        <textarea
+                                            value={createForm.metadata?.notes || ""}
+                                            onChange={(e) => setCreateForm(prev => ({
+                                                ...prev,
+                                                metadata: {
+                                                    ...prev.metadata,
+                                                    notes: e.target.value
+                                                }
+                                            }))}
+                                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            rows={3}
+                                            placeholder="Additional notes about this vehicle unit..."
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Photo Upload Section */}
+                                <div className="space-y-4 pt-6 border-t border-gray-200">
+                                    <h3 className="text-lg font-semibold text-gray-800">Photos</h3>
+
+                                    <div className="space-y-4">
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleFileSelect}
+                                            multiple
+                                            className="hidden"
+                                        />
+
+                                        {/* Upload Area */}
+                                        <div
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-[#1EA2E4] transition-colors"
+                                        >
+                                            <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                                            <p className="text-lg font-medium text-gray-700 mb-2">Upload Vehicle Photos</p>
+                                            <p className="text-sm text-gray-600">Drag & drop or click to browse</p>
+                                            <p className="text-xs text-gray-500 mt-2">Supports: JPG, PNG, WebP (Max 5MB per file)</p>
+                                        </div>
+
+                                        {/* Upload Progress */}
+                                        {isUploading && (
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between text-sm text-gray-600">
+                                                    <span>Uploading photos...</span>
+                                                    <span>{uploadProgress}%</span>
+                                                </div>
+                                                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-[#1EA2E4] transition-all duration-300"
+                                                        style={{ width: `${uploadProgress}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Photo Previews */}
+                                        {photoPreviews.length > 0 && (
                                             <div className="space-y-3">
-                                                <p className="text-sm font-medium text-gray-700">Existing Photos</p>
-                                                <div className="space-y-2">
-                                                    {editExistingPhotos.map((img, index) => (
-                                                        <div
-                                                            key={index}
-                                                            className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 group"
-                                                            draggable
-                                                            onDragStart={() => handleDragStart(index)}
-                                                            onDragOver={(e) => handleDragOver(e, index)}
-                                                            onDrop={() => handleDrop(index)}
-                                                        >
-                                                            <div className="flex-shrink-0">
-                                                                <GripVertical className="w-4 h-4 text-gray-400 cursor-move hover:text-gray-600" />
-                                                            </div>
-                                                            <div className="flex-shrink-0 w-16 h-16 rounded border border-gray-300 overflow-hidden">
+                                                <div className="flex justify-between items-center">
+                                                    <p className="text-sm font-medium text-gray-700">
+                                                        Selected Photos ({photoPreviews.length})
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setPhotoFiles([]);
+                                                            setPhotoPreviews([]);
+                                                            if (fileInputRef.current) fileInputRef.current.value = '';
+                                                        }}
+                                                        className="text-sm text-red-600 hover:text-red-800"
+                                                    >
+                                                        Clear All
+                                                    </button>
+                                                </div>
+                                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                                    {photoPreviews.map((preview, index) => (
+                                                        <div key={index} className="relative group">
+                                                            <div className="aspect-square rounded-lg border border-gray-300 overflow-hidden">
                                                                 <img
-                                                                    src={img}
-                                                                    alt={`Existing ${index + 1}`}
+                                                                    src={preview}
+                                                                    alt={`Preview ${index + 1}`}
                                                                     className="w-full h-full object-cover"
                                                                 />
                                                             </div>
-                                                            <div className="flex-1">
-                                                                <p className="text-sm text-gray-600">Photo {index + 1}</p>
-                                                                <p className="text-xs text-gray-400 truncate">{img.substring(0, 50)}...</p>
-                                                            </div>
-                                                            <div className="flex items-center gap-1">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => movePhotoUp(index)}
-                                                                    disabled={index === 0}
-                                                                    className="p-1.5 text-gray-600 hover:text-[#1EA2E4] hover:bg-[#1EA2E4]/10 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                    title="Move up"
-                                                                >
-                                                                    <ArrowUp className="w-4 h-4" />
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => movePhotoDown(index)}
-                                                                    disabled={index === editExistingPhotos.length - 1}
-                                                                    className="p-1.5 text-gray-600 hover:text-[#1EA2E4] hover:bg-[#1EA2E4]/10 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                    title="Move down"
-                                                                >
-                                                                    <ArrowDown className="w-4 h-4" />
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => removeEditExistingPhoto(index)}
-                                                                    className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded"
-                                                                    title="Remove photo"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removePhoto(index)}
+                                                                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </button>
+                                                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-2 py-1 truncate">
+                                                                {photoFiles[index]?.name || `Photo ${index + 1}`}
                                                             </div>
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
                                         )}
+                                    </div>
+                                </div>
 
-                                        {/* New Photo Upload */}
-                                        <div className="space-y-4">
-                                            <input
-                                                ref={editFileInputRef}
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={handleEditFileSelect}
-                                                multiple
-                                                className="hidden"
-                                            />
+                                {/* Features Section */}
+                                <div className="space-y-4 pt-6 border-t border-gray-200">
+                                    <h3 className="text-lg font-semibold text-gray-800">Features</h3>
+                                    <p className="text-sm text-gray-600">Select features available in this vehicle unit</p>
 
-                                            <div
-                                                onClick={() => editFileInputRef.current?.click()}
-                                                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-[#1EA2E4] transition-colors"
-                                            >
-                                                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                                                <p className="text-sm text-gray-600">Click to add more photos</p>
-                                                <p className="text-xs text-gray-500 mt-1">Supports: JPG, PNG, WebP (Max 5MB per file)</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto p-2">
+                                        {METADATA_FEATURE_OPTIONS.map(feature => (
+                                            <div key={feature} className="flex items-center">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`feature-${feature}`}
+                                                    checked={createForm.metadata?.features?.includes(feature) || false}
+                                                    onChange={() => toggleMetadataFeature(feature, 'create')}
+                                                    className="h-4 w-4 text-[#1EA2E4] focus:ring-[#1EA2E4] border-gray-300 rounded"
+                                                />
+                                                <label htmlFor={`feature-${feature}`} className="ml-2 text-sm text-gray-700">
+                                                    {feature}
+                                                </label>
                                             </div>
+                                        ))}
+                                    </div>
 
-                                            {/* Upload Progress */}
-                                            {isUploading && (
-                                                <div className="space-y-2">
-                                                    <div className="flex justify-between text-sm text-gray-600">
-                                                        <span>Uploading photos...</span>
-                                                        <span>{uploadProgress}%</span>
-                                                    </div>
-                                                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-[#1EA2E4] transition-all duration-300"
-                                                            style={{ width: `${uploadProgress}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* New Photo Previews */}
-                                            {editNewPhotoPreviews.length > 0 && (
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <p className="text-sm font-medium text-gray-700">
-                                                            New Photos ({editNewPhotoPreviews.length})
-                                                        </p>
+                                    {createForm.metadata?.features && createForm.metadata.features.length > 0 && (
+                                        <div className="mt-4">
+                                            <p className="text-sm text-gray-600 mb-2">Selected Features ({createForm.metadata.features.length}):</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {createForm.metadata.features.map(feature => (
+                                                    <span
+                                                        key={feature}
+                                                        className="px-3 py-1 bg-[#1EA2E4]/10 text-[#1A8BC9] text-sm rounded-full flex items-center gap-1"
+                                                    >
+                                                        {feature}
                                                         <button
                                                             type="button"
-                                                            onClick={() => {
-                                                                setEditNewPhotoFiles([]);
-                                                                setEditNewPhotoPreviews([]);
-                                                                if (editFileInputRef.current) editFileInputRef.current.value = '';
-                                                            }}
-                                                            className="text-sm text-red-600 hover:text-red-800"
+                                                            onClick={() => toggleMetadataFeature(feature, 'create')}
+                                                            className="text-[#1A8BC9] hover:text-red-600"
                                                         >
-                                                            Clear All
+                                                            <X className="w-3 h-3" />
                                                         </button>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                                        {editNewPhotoPreviews.map((preview, index) => (
-                                                            <div key={index} className="relative group">
-                                                                <div className="aspect-square rounded-lg border border-gray-300 overflow-hidden">
-                                                                    <img
-                                                                        src={preview}
-                                                                        alt={`New ${index + 1}`}
-                                                                        className="w-full h-full object-cover"
-                                                                    />
-                                                                </div>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => removeEditNewPhoto(index)}
-                                                                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                                                                >
-                                                                    <X className="w-3 h-3" />
-                                                                </button>
-                                                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-2 py-1 truncate">
-                                                                    {editNewPhotoFiles[index]?.name || `New Photo ${index + 1}`}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        onClick={() => setIsCreateModalOpen(false)}
+                                        className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleCreateUnit}
+                                        disabled={!createForm.vin || !createForm.plate_number || !createForm.vehicle_model_id || !createForm.branch_id || isUploading}
+                                        className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isUploading ? 'Uploading...' : 'Create Vehicle Unit'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Edit Vehicle Unit Modal - Side Modal (Wider) */}
+        {isEditModalOpen && selectedUnit && (
+            <div className="fixed inset-0 z-50 overflow-hidden">
+                <div
+                    className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+                    onClick={() => setIsEditModalOpen(false)}
+                />
+                <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
+                    <div className="relative w-screen max-w-5xl">
+                        <div className="h-full bg-white shadow-2xl overflow-y-auto">
+                            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-800">Edit Vehicle Unit</h2>
+                                    <p className="text-sm text-gray-600">Update unit information</p>
+                                </div>
+                                <button
+                                    onClick={() => setIsEditModalOpen(false)}
+                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-gray-600" />
+                                </button>
+                            </div>
+
+                            <div className="p-6 space-y-6">
+                                {/* Basic Information */}
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Basic Information</h3>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                VIN *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={editForm.vin || ''}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, vin: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                                required
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Plate Number *
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={editForm.plate_number || ''}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, plate_number: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                                required
+                                            />
                                         </div>
                                     </div>
 
-                                    {/* Features Section */}
-                                    <div className="space-y-4 pt-6 border-t border-gray-200">
-                                        <h3 className="text-lg font-semibold text-gray-800">Features</h3>
-                                        <p className="text-sm text-gray-600">Select features available in this vehicle unit</p>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto p-2">
-                                            {METADATA_FEATURE_OPTIONS.map(feature => (
-                                                <div key={feature} className="flex items-center">
-                                                    <input
-                                                        type="checkbox"
-                                                        id={`edit-feature-${feature}`}
-                                                        checked={(editForm.metadata?.features || selectedUnit.metadata?.features || []).includes(feature)}
-                                                        onChange={() => toggleMetadataFeature(feature, 'edit')}
-                                                        className="h-4 w-4 text-[#1EA2E4] focus:ring-[#1EA2E4] border-gray-300 rounded"
-                                                    />
-                                                    <label htmlFor={`edit-feature-${feature}`} className="ml-2 text-sm text-gray-700">
-                                                        {feature}
-                                                    </label>
-                                                </div>
-                                            ))}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Vehicle Model *
+                                            </label>
+                                            <select
+                                                value={editForm.vehicle_model_id || ''}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, vehicle_model_id: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                                disabled={loadingModels}
+                                                required
+                                            >
+                                                <option value="">Select a vehicle model</option>
+                                                {vehicleModels.map(model => (
+                                                    <option key={model._id} value={model._id}>
+                                                        {model.make} {model.model} ({model.year}) - {model.class}
+                                                    </option>
+                                                ))}
+                                            </select>
                                         </div>
 
-                                        {(editForm.metadata?.features || selectedUnit.metadata?.features || []).length > 0 && (
-                                            <div className="mt-4">
-                                                <p className="text-sm text-gray-600 mb-2">Selected Features ({(editForm.metadata?.features || selectedUnit.metadata?.features || []).length}):</p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {(editForm.metadata?.features || selectedUnit.metadata?.features || []).map(feature => (
-                                                        <span
-                                                            key={feature}
-                                                            className="px-3 py-1 bg-[#1EA2E4]/10 text-[#1A8BC9] text-sm rounded-full flex items-center gap-1"
-                                                        >
-                                                            {feature}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Branch *
+                                            </label>
+                                            <select
+                                                value={editForm.branch_id || ''}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, branch_id: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                                disabled={loadingBranches}
+                                                required
+                                            >
+                                                <option value="">Select a branch</option>
+                                                {branches.map(branch => (
+                                                    <option key={branch._id} value={branch._id}>
+                                                        {branch.name} ({branch.code}) - {branch.address.city}, {branch.address.country}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Odometer (km)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="1000000"
+                                                value={editForm.odometer_km || ''}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, odometer_km: parseInt(e.target.value) || 0 }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Color
+                                            </label>
+                                            <select
+                                                value={editForm.color || ''}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, color: e.target.value }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            >
+                                                <option value="">Select color</option>
+                                                {COLOR_OPTIONS.map(color => (
+                                                    <option key={color} value={color.toLowerCase()}>{color}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Seats
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="20"
+                                                value={editForm.metadata?.seats || selectedUnit.metadata?.seats || 5}
+                                                onChange={(e) => setEditForm(prev => ({
+                                                    ...prev,
+                                                    metadata: {
+                                                        ...prev.metadata,
+                                                        seats: parseInt(e.target.value) || 5
+                                                    }
+                                                }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Status
+                                            </label>
+                                            <select
+                                                value={editForm.status || ''}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value as VehicleStatus }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            >
+                                                {STATUS_OPTIONS.map(status => (
+                                                    <option key={status} value={status}>{status}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Availability
+                                            </label>
+                                            <select
+                                                value={editForm.availability_state || ''}
+                                                onChange={(e) => setEditForm(prev => ({ ...prev, availability_state: e.target.value as AvailabilityState }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            >
+                                                {AVAILABILITY_OPTIONS.map(availability => (
+                                                    <option key={availability} value={availability}>{availability}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Doors
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="10"
+                                                value={editForm.metadata?.doors || selectedUnit.metadata?.doors || 4}
+                                                onChange={(e) => setEditForm(prev => ({
+                                                    ...prev,
+                                                    metadata: {
+                                                        ...prev.metadata,
+                                                        doors: parseInt(e.target.value) || 4
+                                                    }
+                                                }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* GPS Device ID */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                GPS Device ID
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={editForm.metadata?.gps_device_id || selectedUnit.metadata?.gps_device_id || ''}
+                                                onChange={(e) => setEditForm(prev => ({
+                                                    ...prev,
+                                                    metadata: {
+                                                        ...prev.metadata,
+                                                        gps_device_id: e.target.value
+                                                    }
+                                                }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                                placeholder="e.g., GPS-123456"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Notes */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Notes
+                                        </label>
+                                        <textarea
+                                            value={editForm.metadata?.notes || selectedUnit.metadata?.notes || ''}
+                                            onChange={(e) => setEditForm(prev => ({
+                                                ...prev,
+                                                metadata: {
+                                                    ...prev.metadata,
+                                                    notes: e.target.value
+                                                }
+                                            }))}
+                                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
+                                            rows={3}
+                                            placeholder="Additional notes about this vehicle unit..."
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Photo Management Section */}
+                                <div className="space-y-4 pt-6 border-t border-gray-200">
+                                    <h3 className="text-lg font-semibold text-gray-800">Photos</h3>
+
+                                    {/* Existing Photos with Reordering */}
+                                    {editExistingPhotos.length > 0 && (
+                                        <div className="space-y-3">
+                                            <p className="text-sm font-medium text-gray-700">Existing Photos</p>
+                                            <div className="space-y-2">
+                                                {editExistingPhotos.map((img, index) => (
+                                                    <div
+                                                        key={index}
+                                                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 group"
+                                                        draggable
+                                                        onDragStart={() => handleDragStart(index)}
+                                                        onDragOver={(e) => handleDragOver(e, index)}
+                                                        onDrop={() => handleDrop(index)}
+                                                    >
+                                                        <div className="flex-shrink-0">
+                                                            <GripVertical className="w-4 h-4 text-gray-400 cursor-move hover:text-gray-600" />
+                                                        </div>
+                                                        <div className="flex-shrink-0 w-16 h-16 rounded border border-gray-300 overflow-hidden">
+                                                            <img
+                                                                src={img}
+                                                                alt={`Existing ${index + 1}`}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <p className="text-sm text-gray-600">Photo {index + 1}</p>
+                                                            <p className="text-xs text-gray-400 truncate">{img.substring(0, 50)}...</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
                                                             <button
                                                                 type="button"
-                                                                onClick={() => toggleMetadataFeature(feature, 'edit')}
-                                                                className="text-[#1A8BC9] hover:text-red-600"
+                                                                onClick={() => movePhotoUp(index)}
+                                                                disabled={index === 0}
+                                                                className="p-1.5 text-gray-600 hover:text-[#1EA2E4] hover:bg-[#1EA2E4]/10 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                title="Move up"
+                                                            >
+                                                                <ArrowUp className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => movePhotoDown(index)}
+                                                                disabled={index === editExistingPhotos.length - 1}
+                                                                className="p-1.5 text-gray-600 hover:text-[#1EA2E4] hover:bg-[#1EA2E4]/10 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                title="Move down"
+                                                            >
+                                                                <ArrowDown className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeEditExistingPhoto(index)}
+                                                                className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded"
+                                                                title="Remove photo"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* New Photo Upload */}
+                                    <div className="space-y-4">
+                                        <input
+                                            ref={editFileInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleEditFileSelect}
+                                            multiple
+                                            className="hidden"
+                                        />
+
+                                        <div
+                                            onClick={() => editFileInputRef.current?.click()}
+                                            className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-[#1EA2E4] transition-colors"
+                                        >
+                                            <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                                            <p className="text-sm text-gray-600">Click to add more photos</p>
+                                            <p className="text-xs text-gray-500 mt-1">Supports: JPG, PNG, WebP (Max 5MB per file)</p>
+                                        </div>
+
+                                        {/* Upload Progress */}
+                                        {isUploading && (
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between text-sm text-gray-600">
+                                                    <span>Uploading photos...</span>
+                                                    <span>{uploadProgress}%</span>
+                                                </div>
+                                                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-[#1EA2E4] transition-all duration-300"
+                                                        style={{ width: `${uploadProgress}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* New Photo Previews */}
+                                        {editNewPhotoPreviews.length > 0 && (
+                                            <div className="space-y-3">
+                                                <div className="flex justify-between items-center">
+                                                    <p className="text-sm font-medium text-gray-700">
+                                                        New Photos ({editNewPhotoPreviews.length})
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditNewPhotoFiles([]);
+                                                            setEditNewPhotoPreviews([]);
+                                                            if (editFileInputRef.current) editFileInputRef.current.value = '';
+                                                        }}
+                                                        className="text-sm text-red-600 hover:text-red-800"
+                                                    >
+                                                        Clear All
+                                                    </button>
+                                                </div>
+                                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                                    {editNewPhotoPreviews.map((preview, index) => (
+                                                        <div key={index} className="relative group">
+                                                            <div className="aspect-square rounded-lg border border-gray-300 overflow-hidden">
+                                                                <img
+                                                                    src={preview}
+                                                                    alt={`New ${index + 1}`}
+                                                                    className="w-full h-full object-cover"
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeEditNewPhoto(index)}
+                                                                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                                                             >
                                                                 <X className="w-3 h-3" />
                                                             </button>
-                                                        </span>
+                                                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs px-2 py-1 truncate">
+                                                                {editNewPhotoFiles[index]?.name || `New Photo ${index + 1}`}
+                                                            </div>
+                                                        </div>
                                                     ))}
                                                 </div>
                                             </div>
@@ -2288,149 +2244,196 @@ const VehicleUnitManagement: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
-                                    <div className="flex justify-end gap-3">
-                                        <button
-                                            onClick={() => setIsEditModalOpen(false)}
-                                            className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleUpdateUnit}
-                                            disabled={!editForm.vin || !editForm.plate_number || !editForm.vehicle_model_id || !editForm.branch_id || isUploading}
-                                            className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {isUploading ? 'Uploading...' : 'Save Changes'}
-                                        </button>
+                                {/* Features Section */}
+                                <div className="space-y-4 pt-6 border-t border-gray-200">
+                                    <h3 className="text-lg font-semibold text-gray-800">Features</h3>
+                                    <p className="text-sm text-gray-600">Select features available in this vehicle unit</p>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto p-2">
+                                        {METADATA_FEATURE_OPTIONS.map(feature => (
+                                            <div key={feature} className="flex items-center">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`edit-feature-${feature}`}
+                                                    checked={(editForm.metadata?.features || selectedUnit.metadata?.features || []).includes(feature)}
+                                                    onChange={() => toggleMetadataFeature(feature, 'edit')}
+                                                    className="h-4 w-4 text-[#1EA2E4] focus:ring-[#1EA2E4] border-gray-300 rounded"
+                                                />
+                                                <label htmlFor={`edit-feature-${feature}`} className="ml-2 text-sm text-gray-700">
+                                                    {feature}
+                                                </label>
+                                            </div>
+                                        ))}
                                     </div>
+
+                                    {(editForm.metadata?.features || selectedUnit.metadata?.features || []).length > 0 && (
+                                        <div className="mt-4">
+                                            <p className="text-sm text-gray-600 mb-2">Selected Features ({(editForm.metadata?.features || selectedUnit.metadata?.features || []).length}):</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {(editForm.metadata?.features || selectedUnit.metadata?.features || []).map(feature => (
+                                                    <span
+                                                        key={feature}
+                                                        className="px-3 py-1 bg-[#1EA2E4]/10 text-[#1A8BC9] text-sm rounded-full flex items-center gap-1"
+                                                    >
+                                                        {feature}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleMetadataFeature(feature, 'edit')}
+                                                            className="text-[#1A8BC9] hover:text-red-600"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        onClick={() => setIsEditModalOpen(false)}
+                                        className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleUpdateUnit}
+                                        disabled={!editForm.vin || !editForm.plate_number || !editForm.vehicle_model_id || !editForm.branch_id || isUploading}
+                                        className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isUploading ? 'Uploading...' : 'Save Changes'}
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            )}
+            </div>
+        )}
 
-            {/* Image Viewer Modal - Centered */}
-            {imageViewerOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-                    <div
-                        className="absolute inset-0 bg-black/90 backdrop-blur-sm transition-opacity"
-                        onClick={() => setImageViewerOpen(false)}
-                    />
-                    <div className="relative max-w-6xl w-full max-h-[90vh] animate-in fade-in zoom-in duration-200">
-                        <div className="absolute top-4 right-4 z-10">
-                            <button
-                                onClick={() => setImageViewerOpen(false)}
-                                className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-lg transition-colors"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        <div className="absolute top-4 left-4 z-10 flex gap-2">
-                            <button
-                                onClick={() => setImageZoom(prev => Math.min(prev + 0.25, 3))}
-                                className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-lg transition-colors"
-                                disabled={imageZoom >= 3}
-                            >
-                                <ZoomIn className="w-5 h-5" />
-                            </button>
-                            <button
-                                onClick={() => setImageZoom(prev => Math.max(prev - 0.25, 0.5))}
-                                className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-lg transition-colors"
-                                disabled={imageZoom <= 0.5}
-                            >
-                                <Minus className="w-5 h-5" />
-                            </button>
-                            <button
-                                onClick={resetZoom}
-                                className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-lg transition-colors"
-                            >
-                                Reset
-                            </button>
-                        </div>
-
-                        <div className="h-full w-full flex items-center justify-center p-4">
-                            <div className="relative w-full h-full overflow-auto">
-                                <img
-                                    src={currentImageUrl}
-                                    alt="Full size view"
-                                    className="mx-auto object-contain"
-                                    style={{
-                                        transform: `scale(${imageZoom})`,
-                                        transition: 'transform 0.2s ease'
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Delete Confirmation Modal */}
-            {unitToDelete && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-                        onClick={() => setUnitToDelete(null)}
-                    />
-                    <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
-                        <div className="p-6">
-                            <div className="flex items-center mb-4">
-                                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mr-4">
-                                    <AlertCircle className="w-6 h-6 text-red-600" />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-bold text-gray-900">Delete Vehicle Unit</h3>
-                                    <p className="text-sm text-gray-600">This action cannot be undone</p>
-                                </div>
-                            </div>
-
-                            <p className="text-gray-600 mb-6">
-                                Are you sure you want to delete this vehicle unit? All associated data and photos will be permanently removed.
-                            </p>
-
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    onClick={() => setUnitToDelete(null)}
-                                    className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={() => handleDeleteUnit(unitToDelete)}
-                                    className="px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                                >
-                                    Delete Unit
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Snackbar */}
-            {snackbar.show && (
-                <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom duration-300">
-                    <div className={`px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px] ${snackbar.type === "success" ? "bg-green-50 border border-green-200 text-green-800" :
-                            snackbar.type === "error" ? "bg-red-50 border border-red-200 text-red-800" :
-                                "bg-blue-50 border border-blue-200 text-blue-800"
-                        }`}>
-                        {snackbar.type === "success" && <CheckCircle className="w-5 h-5 flex-shrink-0" />}
-                        {snackbar.type === "error" && <AlertCircle className="w-5 h-5 flex-shrink-0" />}
-                        <span className="text-sm font-medium flex-1">{snackbar.message}</span>
+        {/* Image Viewer Modal - Centered */}
+        {imageViewerOpen && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                <div
+                    className="absolute inset-0 bg-black/90 backdrop-blur-sm transition-opacity"
+                    onClick={() => setImageViewerOpen(false)}
+                />
+                <div className="relative max-w-6xl w-full max-h-[90vh] animate-in fade-in zoom-in duration-200">
+                    <div className="absolute top-4 right-4 z-10">
                         <button
-                            onClick={() => setSnackbar(prev => ({ ...prev, show: false }))}
-                            className="text-gray-400 hover:text-gray-600"
+                            onClick={() => setImageViewerOpen(false)}
+                            className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-lg transition-colors"
                         >
-                            <X className="w-4 h-4" />
+                            <X className="w-5 h-5" />
                         </button>
                     </div>
+
+                    <div className="absolute top-4 left-4 z-10 flex gap-2">
+                        <button
+                            onClick={() => setImageZoom(prev => Math.min(prev + 0.25, 3))}
+                            className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-lg transition-colors"
+                            disabled={imageZoom >= 3}
+                        >
+                            <ZoomIn className="w-5 h-5" />
+                        </button>
+                        <button
+                            onClick={() => setImageZoom(prev => Math.max(prev - 0.25, 0.5))}
+                            className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-lg transition-colors"
+                            disabled={imageZoom <= 0.5}
+                        >
+                            <Minus className="w-5 h-5" />
+                        </button>
+                        <button
+                            onClick={resetZoom}
+                            className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-lg transition-colors"
+                        >
+                            Reset
+                        </button>
+                    </div>
+
+                    <div className="h-full w-full flex items-center justify-center p-4">
+                        <div className="relative w-full h-full overflow-auto">
+                            <img
+                                src={currentImageUrl}
+                                alt="Full size view"
+                                className="mx-auto object-contain"
+                                style={{
+                                    transform: `scale(${imageZoom})`,
+                                    transition: 'transform 0.2s ease'
+                                }}
+                            />
+                        </div>
+                    </div>
                 </div>
-            )}
-        </div>
-    );
+            </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {unitToDelete && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div
+                    className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+                    onClick={() => setUnitToDelete(null)}
+                />
+                <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
+                    <div className="p-6">
+                        <div className="flex items-center mb-4">
+                            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mr-4">
+                                <AlertCircle className="w-6 h-6 text-red-600" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Delete Vehicle Unit</h3>
+                                <p className="text-sm text-gray-600">This action cannot be undone</p>
+                            </div>
+                        </div>
+
+                        <p className="text-gray-600 mb-6">
+                            Are you sure you want to delete this vehicle unit? All associated data and photos will be permanently removed.
+                        </p>
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setUnitToDelete(null)}
+                                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleDeleteUnit(unitToDelete)}
+                                className="px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                            >
+                                Delete Unit
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Snackbar */}
+        {snackbar.show && (
+            <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom duration-300">
+                <div className={`px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px] ${snackbar.type === "success" ? "bg-green-50 border border-green-200 text-green-800" :
+                        snackbar.type === "error" ? "bg-red-50 border border-red-200 text-red-800" :
+                            "bg-blue-50 border border-blue-200 text-blue-800"
+                    }`}>
+                    {snackbar.type === "success" && <CheckCircle className="w-5 h-5 flex-shrink-0" />}
+                    {snackbar.type === "error" && <AlertCircle className="w-5 h-5 flex-shrink-0" />}
+                    <span className="text-sm font-medium flex-1">{snackbar.message}</span>
+                    <button
+                        onClick={() => setSnackbar(prev => ({ ...prev, show: false }))}
+                        className="text-gray-400 hover:text-gray-600"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+        )}
+    </div>
+);
 };
 
 export default VehicleUnitManagement;

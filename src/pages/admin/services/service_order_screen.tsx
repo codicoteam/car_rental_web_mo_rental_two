@@ -502,13 +502,13 @@ const ServiceOrderScreen: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50 font-sans">
-      {/* Sidebar */}
+    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+      {/* Sidebar - Fixed */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        {/* Header */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header - Fixed */}
         <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center">
@@ -538,189 +538,345 @@ const ServiceOrderScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Stats Overview */}
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Orders</p>
-                  <p className="text-2xl font-bold text-gray-800">{serviceOrders.length}</p>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Stats Overview */}
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Orders</p>
+                    <p className="text-2xl font-bold text-gray-800">{serviceOrders.length}</p>
+                  </div>
+                  <div className="p-2 bg-blue-50 rounded-lg">
+                    <ClipboardCheck className="w-6 h-6 text-[#1EA2E4]" />
+                  </div>
                 </div>
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <ClipboardCheck className="w-6 h-6 text-[#1EA2E4]" />
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">In Progress</p>
+                    <p className="text-2xl font-bold text-yellow-600">
+                      {statusStats.in_progress}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-yellow-50 rounded-lg">
+                    <RotateCw className="w-6 h-6 text-yellow-500" />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Completed</p>
+                    <p className="text-2xl font-bold text-green-600">
+                      {statusStats.completed}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-green-50 rounded-lg">
+                    <CheckCircle className="w-6 h-6 text-green-500" />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Cost</p>
+                    <p className="text-2xl font-bold text-gray-800">
+                      {formatCurrency(serviceOrders.reduce((sum, order) => sum + (order.cost || 0), 0))}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-purple-50 rounded-lg">
+                    <DollarSign className="w-6 h-6 text-purple-500" />
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Filters & Search */}
             <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">In Progress</p>
-                  <p className="text-2xl font-bold text-yellow-600">
-                    {statusStats.in_progress}
-                  </p>
+              <div className="flex flex-col lg:flex-row gap-4">
+                {/* Search */}
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by VIN, plate, order ID, or notes..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent transition-all"
+                    />
+                  </div>
                 </div>
-                <div className="p-2 bg-yellow-50 rounded-lg">
-                  <RotateCw className="w-6 h-6 text-yellow-500" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Completed</p>
-                  <p className="text-2xl font-bold text-green-600">
-                    {statusStats.completed}
-                  </p>
-                </div>
-                <div className="p-2 bg-green-50 rounded-lg">
-                  <CheckCircle className="w-6 h-6 text-green-500" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Cost</p>
-                  <p className="text-2xl font-bold text-gray-800">
-                    {formatCurrency(serviceOrders.reduce((sum, order) => sum + (order.cost || 0), 0))}
-                  </p>
-                </div>
-                <div className="p-2 bg-purple-50 rounded-lg">
-                  <DollarSign className="w-6 h-6 text-purple-500" />
+
+                {/* Filters */}
+                <div className="flex flex-wrap gap-3">
+                  <div className="relative">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[140px]"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="open">Open</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                    <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+
+                  <div className="relative">
+                    <select
+                      value={typeFilter}
+                      onChange={(e) => setTypeFilter(e.target.value)}
+                      className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[160px]"
+                    >
+                      <option value="all">All Types</option>
+                      <option value="scheduled_service">Scheduled Service</option>
+                      <option value="repair">Repair</option>
+                      <option value="tyre_change">Tyre Change</option>
+                      <option value="inspection">Inspection</option>
+                    </select>
+                    <Settings className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+
+                  <div className="relative">
+                    <select
+                      value={vehicleFilter}
+                      onChange={(e) => setVehicleFilter(e.target.value)}
+                      className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[160px]"
+                    >
+                      <option value="all">All Vehicles</option>
+                      {uniqueVehicles.map((vehicle) => (
+                        <option key={vehicle._id} value={vehicle._id}>
+                          {vehicle.vin} - {vehicle.plate_number}
+                        </option>
+                      ))}
+                    </select>
+                    <Car className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Filters & Search */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-            <div className="flex flex-col lg:flex-row gap-4">
-              {/* Search */}
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by VIN, plate, order ID, or notes..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent transition-all"
-                  />
+          {/* Service Orders Grid/Table */}
+          <div className="px-6 pb-6">
+            {loading ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="flex flex-col items-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1EA2E4] mb-4"></div>
+                  <p className="text-gray-600">Loading service orders...</p>
                 </div>
               </div>
-
-              {/* Filters */}
-              <div className="flex flex-wrap gap-3">
-                <div className="relative">
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[140px]"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="open">Open</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                  <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-
-                <div className="relative">
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value)}
-                    className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[160px]"
-                  >
-                    <option value="all">All Types</option>
-                    <option value="scheduled_service">Scheduled Service</option>
-                    <option value="repair">Repair</option>
-                    <option value="tyre_change">Tyre Change</option>
-                    <option value="inspection">Inspection</option>
-                  </select>
-                  <Settings className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-
-                <div className="relative">
-                  <select
-                    value={vehicleFilter}
-                    onChange={(e) => setVehicleFilter(e.target.value)}
-                    className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[160px]"
-                  >
-                    <option value="all">All Vehicles</option>
-                    {uniqueVehicles.map((vehicle) => (
-                      <option key={vehicle._id} value={vehicle._id}>
-                        {vehicle.vin} - {vehicle.plate_number}
-                      </option>
-                    ))}
-                  </select>
-                  <Car className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Service Orders Grid/Table */}
-        <div className="px-6 pb-6">
-          {loading ? (
-            <div className="flex justify-center items-center h-64">
-              <div className="flex flex-col items-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1EA2E4] mb-4"></div>
-                <p className="text-gray-600">Loading service orders...</p>
-              </div>
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center h-64 p-6">
-              <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-              <p className="text-red-600 text-center mb-4">{error}</p>
-              <button
-                onClick={loadServiceOrders}
-                className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors flex items-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Retry
-              </button>
-            </div>
-          ) : filteredOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 p-6">
-              <Wrench className="w-20 h-20 text-gray-300 mb-4" />
-              <p className="text-gray-500 text-lg mb-2">No service orders found</p>
-              <p className="text-gray-400 text-center mb-6">
-                {searchTerm || statusFilter !== "all" || typeFilter !== "all" || vehicleFilter !== "all"
-                  ? "Try adjusting your filters or search terms"
-                  : "Get started by creating your first service order"}
-              </p>
-              {!searchTerm && statusFilter === "all" && typeFilter === "all" && vehicleFilter === "all" && (
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center h-64 p-6">
+                <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+                <p className="text-red-600 text-center mb-4">{error}</p>
                 <button
-                  onClick={openAddModal}
-                  className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors"
+                  onClick={loadServiceOrders}
+                  className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors flex items-center gap-2"
                 >
-                  Create Service Order
+                  <RefreshCw className="w-4 h-4" />
+                  Retry
                 </button>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Desktop Grid */}
-              <div className="hidden lg:block">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 p-6">
+                <Wrench className="w-20 h-20 text-gray-300 mb-4" />
+                <p className="text-gray-500 text-lg mb-2">No service orders found</p>
+                <p className="text-gray-400 text-center mb-6">
+                  {searchTerm || statusFilter !== "all" || typeFilter !== "all" || vehicleFilter !== "all"
+                    ? "Try adjusting your filters or search terms"
+                    : "Get started by creating your first service order"}
+                </p>
+                {!searchTerm && statusFilter === "all" && typeFilter === "all" && vehicleFilter === "all" && (
+                  <button
+                    onClick={openAddModal}
+                    className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors"
+                  >
+                    Create Service Order
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Desktop Grid */}
+                <div className="hidden lg:block">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredOrders.map((order) => {
+                      const vehicleInfo = getVehicleInfo(order);
+                      const statusBadge = getStatusBadge(order);
+                      const typeBadge = getTypeBadge(order);
+                      const StatusIcon = statusBadge.icon;
+                      const TypeIcon = typeBadge.icon;
+
+                      return (
+                        <div
+                          key={order._id}
+                          className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                        >
+                          {/* Vehicle Image */}
+                          {vehicleInfo.photos && vehicleInfo.photos.length > 0 && (
+                            <div className="h-40 overflow-hidden relative">
+                              <img
+                                src={vehicleInfo.photos[0]}
+                                alt={`${vehicleInfo.make} ${vehicleInfo.model}`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = `https://via.placeholder.com/400x200/1EA2E4/ffffff?text=${encodeURIComponent(
+                                    `${vehicleInfo.make} ${vehicleInfo.model}`
+                                  )}`;
+                                }}
+                              />
+                              <div className="absolute top-3 right-3 flex flex-col gap-2">
+                                <span
+                                  className={`px-3 py-1 text-xs font-medium rounded-full ${statusBadge.color}`}
+                                >
+                                  <StatusIcon className="w-3 h-3 inline mr-1" />
+                                  {statusBadge.text}
+                                </span>
+                                <span
+                                  className={`px-3 py-1 text-xs font-medium rounded-full ${typeBadge.color}`}
+                                >
+                                  <TypeIcon className="w-3 h-3 inline mr-1" />
+                                  {typeBadge.text}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="p-6">
+                            {/* Order Header */}
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <h3 className="text-lg font-bold text-gray-900">
+                                    {vehicleInfo.make} {vehicleInfo.model} ({vehicleInfo.year})
+                                  </h3>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Tag className="w-4 h-4" />
+                                  <span className="font-mono">{vehicleInfo.vin}</span>
+                                  <span className="text-gray-400">•</span>
+                                  <span className="font-medium">{vehicleInfo.plate}</span>
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Order ID: <span className="font-mono">{order._id.substring(0, 8)}...</span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => openViewModal(order)}
+                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                              >
+                                <Eye className="w-5 h-5 text-gray-600" />
+                              </button>
+                            </div>
+
+                            {/* Order Details */}
+                            <div className="space-y-4 mb-6">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Calendar className="w-4 h-4" />
+                                  <span>Created: {formatDate(order.created_at)}</span>
+                                </div>
+                                {order.cost && (
+                                  <div className="text-lg font-bold text-[#1EA2E4]">
+                                    {formatCurrency(order.cost)}
+                                  </div>
+                                )}
+                              </div>
+
+                              {order.odometer_km && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Gauge className="w-4 h-4" />
+                                  <span>Odometer: {order.odometer_km.toLocaleString()} km</span>
+                                </div>
+                              )}
+
+                              {order.notes && (
+                                <div className="text-sm text-gray-600 line-clamp-2">
+                                  <FileText className="w-4 h-4 inline mr-2" />
+                                  {order.notes}
+                                </div>
+                              )}
+
+                              {/* Quick Status Update */}
+                              <div className="pt-2 border-t border-gray-100">
+                                <p className="text-xs text-gray-500 mb-2">Quick Actions:</p>
+                                {getQuickStatusButtons(order)}
+                              </div>
+                            </div>
+
+                            {/* Vehicle Details */}
+                            <div className="flex flex-wrap gap-2 mb-4">
+                              <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                                {vehicleInfo.color}
+                              </span>
+                              <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                                {vehicleInfo.branch}
+                              </span>
+                              {vehicleInfo.odometer > 0 && (
+                                <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                                  {vehicleInfo.odometer.toLocaleString()} km
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                              <div className="text-xs text-gray-500">
+                                {order.updated_at && (
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    Updated: {formatDate(order.updated_at)}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => openEditModal(order)}
+                                  className="p-2 text-gray-600 hover:text-[#1EA2E4] hover:bg-[#1EA2E4]/10 rounded-lg transition-colors"
+                                  title="Edit Service Order"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setOrderToDelete(order._id)}
+                                  className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Delete Service Order"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="lg:hidden space-y-4">
                   {filteredOrders.map((order) => {
                     const vehicleInfo = getVehicleInfo(order);
                     const statusBadge = getStatusBadge(order);
                     const typeBadge = getTypeBadge(order);
                     const StatusIcon = statusBadge.icon;
-                    const TypeIcon = typeBadge.icon;
 
                     return (
                       <div
                         key={order._id}
-                        className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                        className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
                       >
-                        {/* Vehicle Image */}
+                        {/* Vehicle Image for Mobile */}
                         {vehicleInfo.photos && vehicleInfo.photos.length > 0 && (
-                          <div className="h-40 overflow-hidden relative">
+                          <div className="h-32 overflow-hidden relative">
                             <img
                               src={vehicleInfo.photos[0]}
                               alt={`${vehicleInfo.make} ${vehicleInfo.model}`}
@@ -731,259 +887,106 @@ const ServiceOrderScreen: React.FC = () => {
                                 )}`;
                               }}
                             />
-                            <div className="absolute top-3 right-3 flex flex-col gap-2">
+                            <div className="absolute top-2 right-2 flex gap-1">
                               <span
-                                className={`px-3 py-1 text-xs font-medium rounded-full ${statusBadge.color}`}
+                                className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusBadge.color}`}
                               >
-                                <StatusIcon className="w-3 h-3 inline mr-1" />
                                 {statusBadge.text}
-                              </span>
-                              <span
-                                className={`px-3 py-1 text-xs font-medium rounded-full ${typeBadge.color}`}
-                              >
-                                <TypeIcon className="w-3 h-3 inline mr-1" />
-                                {typeBadge.text}
                               </span>
                             </div>
                           </div>
                         )}
 
-                        <div className="p-6">
-                          {/* Order Header */}
-                          <div className="flex justify-between items-start mb-4">
+                        <div className="p-4">
+                          <div className="flex justify-between items-start mb-3">
                             <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <h3 className="text-lg font-bold text-gray-900">
-                                  {vehicleInfo.make} {vehicleInfo.model} ({vehicleInfo.year})
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-bold text-gray-900">
+                                  {vehicleInfo.make} {vehicleInfo.model}
                                 </h3>
                               </div>
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Tag className="w-4 h-4" />
-                                <span className="font-mono">{vehicleInfo.vin}</span>
-                                <span className="text-gray-400">•</span>
-                                <span className="font-medium">{vehicleInfo.plate}</span>
-                              </div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                Order ID: <span className="font-mono">{order._id.substring(0, 8)}...</span>
-                              </div>
+                              <p className="text-sm text-gray-600">
+                                {vehicleInfo.vin} • {vehicleInfo.plate}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {typeBadge.text}
+                              </p>
                             </div>
-                            <button
-                              onClick={() => openViewModal(order)}
-                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                              <Eye className="w-5 h-5 text-gray-600" />
-                            </button>
-                          </div>
-
-                          {/* Order Details */}
-                          <div className="space-y-4 mb-6">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Calendar className="w-4 h-4" />
-                                <span>Created: {formatDate(order.created_at)}</span>
-                              </div>
-                              {order.cost && (
-                                <div className="text-lg font-bold text-[#1EA2E4]">
-                                  {formatCurrency(order.cost)}
-                                </div>
-                              )}
-                            </div>
-
-                            {order.odometer_km && (
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Gauge className="w-4 h-4" />
-                                <span>Odometer: {order.odometer_km.toLocaleString()} km</span>
-                              </div>
-                            )}
-
-                            {order.notes && (
-                              <div className="text-sm text-gray-600 line-clamp-2">
-                                <FileText className="w-4 h-4 inline mr-2" />
-                                {order.notes}
-                              </div>
-                            )}
-
-                            {/* Quick Status Update */}
-                            <div className="pt-2 border-t border-gray-100">
-                              <p className="text-xs text-gray-500 mb-2">Quick Actions:</p>
-                              {getQuickStatusButtons(order)}
-                            </div>
-                          </div>
-
-                          {/* Vehicle Details */}
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
-                              {vehicleInfo.color}
-                            </span>
-                            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
-                              {vehicleInfo.branch}
-                            </span>
-                            {vehicleInfo.odometer > 0 && (
-                              <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
-                                {vehicleInfo.odometer.toLocaleString()} km
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                            <div className="text-xs text-gray-500">
-                              {order.updated_at && (
-                                <div className="flex items-center gap-1">
-                                  <Calendar className="w-3 h-3" />
-                                  Updated: {formatDate(order.updated_at)}
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => openViewModal(order)}
+                                className="p-1.5 hover:bg-gray-100 rounded-lg"
+                              >
+                                <Eye className="w-4 h-4 text-gray-600" />
+                              </button>
                               <button
                                 onClick={() => openEditModal(order)}
-                                className="p-2 text-gray-600 hover:text-[#1EA2E4] hover:bg-[#1EA2E4]/10 rounded-lg transition-colors"
-                                title="Edit Service Order"
+                                className="p-1.5 hover:bg-gray-100 rounded-lg"
                               >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setOrderToDelete(order._id)}
-                                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Delete Service Order"
-                              >
-                                <Trash2 className="w-4 h-4" />
+                                <Edit className="w-4 h-4 text-gray-600" />
                               </button>
                             </div>
+                          </div>
+
+                          <div className="space-y-3 mb-4">
+                            <div className="text-sm text-gray-600">
+                              <div className="flex items-center justify-between">
+                                <span>Status:</span>
+                                <span className={`px-2 py-0.5 text-xs rounded-full ${statusBadge.color}`}>
+                                  {statusBadge.text}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="text-sm text-gray-600">
+                              <div className="flex items-center justify-between">
+                                <span>Created:</span>
+                                <span className="font-medium">
+                                  {formatDate(order.created_at)}
+                                </span>
+                              </div>
+                            </div>
+
+                            {order.cost && (
+                              <div className="text-sm text-gray-600">
+                                <div className="flex items-center justify-between">
+                                  <span>Cost:</span>
+                                  <span className="font-bold text-[#1EA2E4]">
+                                    {formatCurrency(order.cost)}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {order.odometer_km && (
+                              <div className="text-sm text-gray-600">
+                                <div className="flex items-center justify-between">
+                                  <span>Odometer:</span>
+                                  <span>{order.odometer_km.toLocaleString()} km</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                            <div className="text-xs text-gray-500">
+                              ID: {order._id.substring(0, 8)}...
+                            </div>
+                            <button
+                              onClick={() => setOrderToDelete(order._id)}
+                              className="px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium"
+                            >
+                              Delete
+                            </button>
                           </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </div>
-
-              {/* Mobile Cards */}
-              <div className="lg:hidden space-y-4">
-                {filteredOrders.map((order) => {
-                  const vehicleInfo = getVehicleInfo(order);
-                  const statusBadge = getStatusBadge(order);
-                  const typeBadge = getTypeBadge(order);
-                  const StatusIcon = statusBadge.icon;
-
-                  return (
-                    <div
-                      key={order._id}
-                      className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
-                    >
-                      {/* Vehicle Image for Mobile */}
-                      {vehicleInfo.photos && vehicleInfo.photos.length > 0 && (
-                        <div className="h-32 overflow-hidden relative">
-                          <img
-                            src={vehicleInfo.photos[0]}
-                            alt={`${vehicleInfo.make} ${vehicleInfo.model}`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = `https://via.placeholder.com/400x200/1EA2E4/ffffff?text=${encodeURIComponent(
-                                `${vehicleInfo.make} ${vehicleInfo.model}`
-                              )}`;
-                            }}
-                          />
-                          <div className="absolute top-2 right-2 flex gap-1">
-                            <span
-                              className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusBadge.color}`}
-                            >
-                              {statusBadge.text}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="p-4">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-bold text-gray-900">
-                                {vehicleInfo.make} {vehicleInfo.model}
-                              </h3>
-                            </div>
-                            <p className="text-sm text-gray-600">
-                              {vehicleInfo.vin} • {vehicleInfo.plate}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {typeBadge.text}
-                            </p>
-                          </div>
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => openViewModal(order)}
-                              className="p-1.5 hover:bg-gray-100 rounded-lg"
-                            >
-                              <Eye className="w-4 h-4 text-gray-600" />
-                            </button>
-                            <button
-                              onClick={() => openEditModal(order)}
-                              className="p-1.5 hover:bg-gray-100 rounded-lg"
-                            >
-                              <Edit className="w-4 h-4 text-gray-600" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3 mb-4">
-                          <div className="text-sm text-gray-600">
-                            <div className="flex items-center justify-between">
-                              <span>Status:</span>
-                              <span className={`px-2 py-0.5 text-xs rounded-full ${statusBadge.color}`}>
-                                {statusBadge.text}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="text-sm text-gray-600">
-                            <div className="flex items-center justify-between">
-                              <span>Created:</span>
-                              <span className="font-medium">
-                                {formatDate(order.created_at)}
-                              </span>
-                            </div>
-                          </div>
-
-                          {order.cost && (
-                            <div className="text-sm text-gray-600">
-                              <div className="flex items-center justify-between">
-                                <span>Cost:</span>
-                                <span className="font-bold text-[#1EA2E4]">
-                                  {formatCurrency(order.cost)}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-
-                          {order.odometer_km && (
-                            <div className="text-sm text-gray-600">
-                              <div className="flex items-center justify-between">
-                                <span>Odometer:</span>
-                                <span>{order.odometer_km.toLocaleString()} km</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex justify-between items-center pt-3 border-t border-gray-100">
-                          <div className="text-xs text-gray-500">
-                            ID: {order._id.substring(0, 8)}...
-                          </div>
-                          <button
-                            onClick={() => setOrderToDelete(order._id)}
-                            className="px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1339,8 +1342,7 @@ const ServiceOrderScreen: React.FC = () => {
                       </h3>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Select Vehicle
-                        </label>
+                          Select Vehicle                        </label>
                         <select
                           value={selectedVehicle?._id || ""}
                           onChange={(e) => handleVehicleSelect(e.target.value)}

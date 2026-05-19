@@ -466,13 +466,13 @@ const ServiceScheduleScreen: React.FC = () => {
   );
 
   return (
-    <div className="flex min-h-screen bg-gray-50 font-sans">
-      {/* Sidebar */}
+    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+      {/* Sidebar - Fixed */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        {/* Header */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header - Fixed */}
         <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center">
@@ -502,170 +502,329 @@ const ServiceScheduleScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Stats Overview */}
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Schedules</p>
-                  <p className="text-2xl font-bold text-gray-800">{serviceSchedules.length}</p>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Stats Overview */}
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Schedules</p>
+                    <p className="text-2xl font-bold text-gray-800">{serviceSchedules.length}</p>
+                  </div>
+                  <div className="p-2 bg-blue-50 rounded-lg">
+                    <Calendar className="w-6 h-6 text-[#1EA2E4]" />
+                  </div>
                 </div>
-                <div className="p-2 bg-blue-50 rounded-lg">
-                  <Calendar className="w-6 h-6 text-[#1EA2E4]" />
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Overdue</p>
+                    <p className="text-2xl font-bold text-red-600">
+                      {serviceSchedules.filter(isOverdue).length}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-red-50 rounded-lg">
+                    <AlertTriangle className="w-6 h-6 text-red-500" />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Due Soon</p>
+                    <p className="text-2xl font-bold text-yellow-600">
+                      {serviceSchedules.filter(isDueSoon).length}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-yellow-50 rounded-lg">
+                    <Clock className="w-6 h-6 text-yellow-500" />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Active Vehicles</p>
+                    <p className="text-2xl font-bold text-gray-800">{vehicles.length}</p>
+                  </div>
+                  <div className="p-2 bg-green-50 rounded-lg">
+                    <Car className="w-6 h-6 text-green-500" />
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Filters & Search */}
             <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Overdue</p>
-                  <p className="text-2xl font-bold text-red-600">
-                    {serviceSchedules.filter(isOverdue).length}
-                  </p>
+              <div className="flex flex-col lg:flex-row gap-4">
+                {/* Search */}
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by vehicle, model, or notes..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent transition-all"
+                    />
+                  </div>
                 </div>
-                <div className="p-2 bg-red-50 rounded-lg">
-                  <AlertTriangle className="w-6 h-6 text-red-500" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Due Soon</p>
-                  <p className="text-2xl font-bold text-yellow-600">
-                    {serviceSchedules.filter(isDueSoon).length}
-                  </p>
-                </div>
-                <div className="p-2 bg-yellow-50 rounded-lg">
-                  <Clock className="w-6 h-6 text-yellow-500" />
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Active Vehicles</p>
-                  <p className="text-2xl font-bold text-gray-800">{vehicles.length}</p>
-                </div>
-                <div className="p-2 bg-green-50 rounded-lg">
-                  <Car className="w-6 h-6 text-green-500" />
+
+                {/* Filters */}
+                <div className="flex flex-wrap gap-3">
+                  <div className="relative">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[140px]"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="overdue">Overdue</option>
+                      <option value="due">Due Soon</option>
+                      <option value="future">Future</option>
+                    </select>
+                    <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+
+                  <div className="relative">
+                    <select
+                      value={vehicleFilter}
+                      onChange={(e) => setVehicleFilter(e.target.value)}
+                      className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[160px]"
+                    >
+                      <option value="all">All Vehicles</option>
+                      {uniqueVehicles.map((vehicle) => (
+                        <option key={vehicle._id} value={vehicle._id}>
+                          {vehicle.vin} - {vehicle.plate_number}
+                        </option>
+                      ))}
+                    </select>
+                    <Car className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Filters & Search */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-            <div className="flex flex-col lg:flex-row gap-4">
-              {/* Search */}
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by vehicle, model, or notes..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent transition-all"
-                  />
+          {/* Service Schedules Grid/Table */}
+          <div className="px-6 pb-6">
+            {loading ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="flex flex-col items-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1EA2E4] mb-4"></div>
+                  <p className="text-gray-600">Loading service schedules...</p>
                 </div>
               </div>
-
-              {/* Filters */}
-              <div className="flex flex-wrap gap-3">
-                <div className="relative">
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[140px]"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="overdue">Overdue</option>
-                    <option value="due">Due Soon</option>
-                    <option value="future">Future</option>
-                  </select>
-                  <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-
-                <div className="relative">
-                  <select
-                    value={vehicleFilter}
-                    onChange={(e) => setVehicleFilter(e.target.value)}
-                    className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[160px]"
-                  >
-                    <option value="all">All Vehicles</option>
-                    {uniqueVehicles.map((vehicle) => (
-                      <option key={vehicle._id} value={vehicle._id}>
-                        {vehicle.vin} - {vehicle.plate_number}
-                      </option>
-                    ))}
-                  </select>
-                  <Car className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Service Schedules Grid/Table */}
-        <div className="px-6 pb-6">
-          {loading ? (
-            <div className="flex justify-center items-center h-64">
-              <div className="flex flex-col items-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1EA2E4] mb-4"></div>
-                <p className="text-gray-600">Loading service schedules...</p>
-              </div>
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center h-64 p-6">
-              <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-              <p className="text-red-600 text-center mb-4">{error}</p>
-              <button
-                onClick={loadServiceSchedules}
-                className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors flex items-center gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Retry
-              </button>
-            </div>
-          ) : filteredSchedules.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 p-6">
-              <Wrench className="w-20 h-20 text-gray-300 mb-4" />
-              <p className="text-gray-500 text-lg mb-2">No service schedules found</p>
-              <p className="text-gray-400 text-center mb-6">
-                {searchTerm || statusFilter !== "all" || vehicleFilter !== "all"
-                  ? "Try adjusting your filters or search terms"
-                  : "Get started by adding your first service schedule"}
-              </p>
-              {!searchTerm && statusFilter === "all" && vehicleFilter === "all" && (
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center h-64 p-6">
+                <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+                <p className="text-red-600 text-center mb-4">{error}</p>
                 <button
-                  onClick={openAddModal}
-                  className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors"
+                  onClick={loadServiceSchedules}
+                  className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors flex items-center gap-2"
                 >
-                  Add Service Schedule
+                  <RefreshCw className="w-4 h-4" />
+                  Retry
                 </button>
-              )}
-            </div>
-          ) : (
-            <>
-              {/* Desktop Grid */}
-              <div className="hidden lg:block">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              </div>
+            ) : filteredSchedules.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 p-6">
+                <Wrench className="w-20 h-20 text-gray-300 mb-4" />
+                <p className="text-gray-500 text-lg mb-2">No service schedules found</p>
+                <p className="text-gray-400 text-center mb-6">
+                  {searchTerm || statusFilter !== "all" || vehicleFilter !== "all"
+                    ? "Try adjusting your filters or search terms"
+                    : "Get started by adding your first service schedule"}
+                </p>
+                {!searchTerm && statusFilter === "all" && vehicleFilter === "all" && (
+                  <button
+                    onClick={openAddModal}
+                    className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors"
+                  >
+                    Add Service Schedule
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Desktop Grid */}
+                <div className="hidden lg:block">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredSchedules.map((schedule) => {
+                      const vehicleInfo = getVehicleInfo(schedule);
+                      const statusBadge = getStatusBadge(schedule);
+                      const daysUntilDue = getDaysUntilDue(schedule);
+                      const odometerProgress = getOdometerProgress(schedule);
+
+                      return (
+                        <div
+                          key={schedule._id}
+                          className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                        >
+                          {/* Vehicle Image */}
+                          {vehicleInfo.photos && vehicleInfo.photos.length > 0 && (
+                            <div className="h-40 overflow-hidden">
+                              <img
+                                src={vehicleInfo.photos[0]}
+                                alt={`${vehicleInfo.make} ${vehicleInfo.model}`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = `https://via.placeholder.com/400x200/1EA2E4/ffffff?text=${encodeURIComponent(
+                                    `${vehicleInfo.make} ${vehicleInfo.model}`
+                                  )}`;
+                                }}
+                              />
+                            </div>
+                          )}
+
+                          <div className="p-6">
+                            {/* Schedule Header */}
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <h3 className="text-lg font-bold text-gray-900">
+                                    {vehicleInfo.make} {vehicleInfo.model} ({vehicleInfo.year})
+                                  </h3>
+                                  <span
+                                    className={`px-2 py-1 text-xs font-medium rounded-full ${statusBadge.color}`}
+                                  >
+                                    {statusBadge.text}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Tag className="w-4 h-4" />
+                                  <span className="font-mono">{vehicleInfo.vin}</span>
+                                  <span className="text-gray-400">•</span>
+                                  <span className="font-medium">{vehicleInfo.plate}</span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => openViewModal(schedule)}
+                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                              >
+                                <Eye className="w-5 h-5 text-gray-600" />
+                              </button>
+                            </div>
+
+                            {/* Next Due Date */}
+                            <div className="mb-4">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-sm text-gray-600">Next Service</span>
+                                <span className="text-sm font-semibold text-gray-800">
+                                  {formatDate(schedule.next_due_at)}
+                                </span>
+                              </div>
+                              {daysUntilDue !== null && (
+                                <div className="flex items-center gap-2 text-sm">
+                                  <Clock className="w-4 h-4 text-gray-400" />
+                                  <span className={daysUntilDue <= 0 ? "text-red-600 font-medium" : "text-gray-600"}>
+                                    {daysUntilDue <= 0 
+                                      ? `${Math.abs(daysUntilDue)} days overdue` 
+                                      : `Due in ${daysUntilDue} days`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Service Intervals */}
+                            <div className="space-y-3 mb-6">
+                              {schedule.interval_km && (
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <Gauge className="w-4 h-4" />
+                                    <span>Every {schedule.interval_km.toLocaleString()} km</span>
+                                  </div>
+                                  {odometerProgress !== null && (
+                                    <div className="text-xs font-medium text-gray-700">
+                                      {Math.round(odometerProgress)}% used
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {schedule.interval_days && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Calendar className="w-4 h-4" />
+                                  <span>Every {schedule.interval_days} days</span>
+                                </div>
+                              )}
+
+                              {schedule.next_due_odo && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <BarChart3 className="w-4 h-4" />
+                                  <span>Next at {schedule.next_due_odo.toLocaleString()} km</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Vehicle Details */}
+                            <div className="flex flex-wrap gap-2 mb-4">
+                              <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                                {vehicleInfo.color}
+                              </span>
+                              <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                                {vehicleInfo.branch}
+                              </span>
+                              {vehicleInfo.odometer > 0 && (
+                                <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                                  {vehicleInfo.odometer.toLocaleString()} km
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                              <div className="text-xs text-gray-500">
+                                {schedule.createdAt && (
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {formatDate(schedule.createdAt)}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => openEditModal(schedule)}
+                                  className="p-2 text-gray-600 hover:text-[#1EA2E4] hover:bg-[#1EA2E4]/10 rounded-lg transition-colors"
+                                  title="Edit Service Schedule"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => setScheduleToDelete(schedule._id)}
+                                  className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Delete Service Schedule"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="lg:hidden space-y-4">
                   {filteredSchedules.map((schedule) => {
                     const vehicleInfo = getVehicleInfo(schedule);
                     const statusBadge = getStatusBadge(schedule);
                     const daysUntilDue = getDaysUntilDue(schedule);
-                    const odometerProgress = getOdometerProgress(schedule);
 
                     return (
                       <div
                         key={schedule._id}
-                        className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+                        className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
                       >
-                        {/* Vehicle Image */}
+                        {/* Vehicle Image for Mobile */}
                         {vehicleInfo.photos && vehicleInfo.photos.length > 0 && (
-                          <div className="h-40 overflow-hidden">
+                          <div className="h-32 overflow-hidden">
                             <img
                               src={vehicleInfo.photos[0]}
                               alt={`${vehicleInfo.make} ${vehicleInfo.model}`}
@@ -679,249 +838,93 @@ const ServiceScheduleScreen: React.FC = () => {
                           </div>
                         )}
 
-                        <div className="p-6">
-                          {/* Schedule Header */}
-                          <div className="flex justify-between items-start mb-4">
+                        <div className="p-4">
+                          <div className="flex justify-between items-start mb-3">
                             <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <h3 className="text-lg font-bold text-gray-900">
-                                  {vehicleInfo.make} {vehicleInfo.model} ({vehicleInfo.year})
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-bold text-gray-900">
+                                  {vehicleInfo.make} {vehicleInfo.model}
                                 </h3>
                                 <span
-                                  className={`px-2 py-1 text-xs font-medium rounded-full ${statusBadge.color}`}
+                                  className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusBadge.color}`}
                                 >
                                   {statusBadge.text}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Tag className="w-4 h-4" />
-                                <span className="font-mono">{vehicleInfo.vin}</span>
-                                <span className="text-gray-400">•</span>
-                                <span className="font-medium">{vehicleInfo.plate}</span>
-                              </div>
+                              <p className="text-sm text-gray-600">
+                                {vehicleInfo.vin} • {vehicleInfo.plate}
+                              </p>
                             </div>
-                            <button
-                              onClick={() => openViewModal(schedule)}
-                              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                              <Eye className="w-5 h-5 text-gray-600" />
-                            </button>
-                          </div>
-
-                          {/* Next Due Date */}
-                          <div className="mb-4">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm text-gray-600">Next Service</span>
-                              <span className="text-sm font-semibold text-gray-800">
-                                {formatDate(schedule.next_due_at)}
-                              </span>
-                            </div>
-                            {daysUntilDue !== null && (
-                              <div className="flex items-center gap-2 text-sm">
-                                <Clock className="w-4 h-4 text-gray-400" />
-                                <span className={daysUntilDue <= 0 ? "text-red-600 font-medium" : "text-gray-600"}>
-                                  {daysUntilDue <= 0 
-                                    ? `${Math.abs(daysUntilDue)} days overdue` 
-                                    : `Due in ${daysUntilDue} days`}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Service Intervals */}
-                          <div className="space-y-3 mb-6">
-                            {schedule.interval_km && (
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                  <Gauge className="w-4 h-4" />
-                                  <span>Every {schedule.interval_km.toLocaleString()} km</span>
-                                </div>
-                                {odometerProgress !== null && (
-                                  <div className="text-xs font-medium text-gray-700">
-                                    {Math.round(odometerProgress)}% used
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {schedule.interval_days && (
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Calendar className="w-4 h-4" />
-                                <span>Every {schedule.interval_days} days</span>
-                              </div>
-                            )}
-
-                            {schedule.next_due_odo && (
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <BarChart3 className="w-4 h-4" />
-                                <span>Next at {schedule.next_due_odo.toLocaleString()} km</span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Vehicle Details */}
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
-                              {vehicleInfo.color}
-                            </span>
-                            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
-                              {vehicleInfo.branch}
-                            </span>
-                            {vehicleInfo.odometer > 0 && (
-                              <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
-                                {vehicleInfo.odometer.toLocaleString()} km
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                            <div className="text-xs text-gray-500">
-                              {schedule.createdAt && (
-                                <div className="flex items-center gap-1">
-                                  <Calendar className="w-3 h-3" />
-                                  {formatDate(schedule.createdAt)}
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => openViewModal(schedule)}
+                                className="p-1.5 hover:bg-gray-100 rounded-lg"
+                              >
+                                <Eye className="w-4 h-4 text-gray-600" />
+                              </button>
                               <button
                                 onClick={() => openEditModal(schedule)}
-                                className="p-2 text-gray-600 hover:text-[#1EA2E4] hover:bg-[#1EA2E4]/10 rounded-lg transition-colors"
-                                title="Edit Service Schedule"
+                                className="p-1.5 hover:bg-gray-100 rounded-lg"
                               >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setScheduleToDelete(schedule._id)}
-                                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                title="Delete Service Schedule"
-                              >
-                                <Trash2 className="w-4 h-4" />
+                                <Edit className="w-4 h-4 text-gray-600" />
                               </button>
                             </div>
+                          </div>
+
+                          <div className="space-y-3 mb-4">
+                            <div className="text-sm text-gray-600">
+                              <div className="flex items-center justify-between">
+                                <span>Next Service:</span>
+                                <span className="font-medium">
+                                  {formatDate(schedule.next_due_at)}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="text-sm text-gray-600">
+                              <div className="flex items-center gap-2">
+                                <Clock className="w-4 h-4" />
+                                <span>
+                                  {daysUntilDue !== null && daysUntilDue <= 0
+                                    ? `${Math.abs(daysUntilDue)} days overdue`
+                                    : daysUntilDue !== null
+                                    ? `Due in ${daysUntilDue} days`
+                                    : "No due date"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {schedule.interval_km && (
+                              <div className="text-sm text-gray-600">
+                                <div className="flex items-center gap-2">
+                                  <Gauge className="w-4 h-4" />
+                                  <span>Interval: {schedule.interval_km.toLocaleString()} km</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                            {schedule.createdAt && (
+                              <div className="text-xs text-gray-500">
+                                {formatDate(schedule.createdAt)}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => setScheduleToDelete(schedule._id)}
+                              className="px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium"
+                            >
+                              Delete
+                            </button>
                           </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </div>
-
-              {/* Mobile Cards */}
-              <div className="lg:hidden space-y-4">
-                {filteredSchedules.map((schedule) => {
-                  const vehicleInfo = getVehicleInfo(schedule);
-                  const statusBadge = getStatusBadge(schedule);
-                  const daysUntilDue = getDaysUntilDue(schedule);
-
-                  return (
-                    <div
-                      key={schedule._id}
-                      className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
-                    >
-                      {/* Vehicle Image for Mobile */}
-                      {vehicleInfo.photos && vehicleInfo.photos.length > 0 && (
-                        <div className="h-32 overflow-hidden">
-                          <img
-                            src={vehicleInfo.photos[0]}
-                            alt={`${vehicleInfo.make} ${vehicleInfo.model}`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = `https://via.placeholder.com/400x200/1EA2E4/ffffff?text=${encodeURIComponent(
-                                `${vehicleInfo.make} ${vehicleInfo.model}`
-                              )}`;
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      <div className="p-4">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className="font-bold text-gray-900">
-                                {vehicleInfo.make} {vehicleInfo.model}
-                              </h3>
-                              <span
-                                className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusBadge.color}`}
-                              >
-                                {statusBadge.text}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600">
-                              {vehicleInfo.vin} • {vehicleInfo.plate}
-                            </p>
-                          </div>
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => openViewModal(schedule)}
-                              className="p-1.5 hover:bg-gray-100 rounded-lg"
-                            >
-                              <Eye className="w-4 h-4 text-gray-600" />
-                            </button>
-                            <button
-                              onClick={() => openEditModal(schedule)}
-                              className="p-1.5 hover:bg-gray-100 rounded-lg"
-                            >
-                              <Edit className="w-4 h-4 text-gray-600" />
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3 mb-4">
-                          <div className="text-sm text-gray-600">
-                            <div className="flex items-center justify-between">
-                              <span>Next Service:</span>
-                              <span className="font-medium">
-                                {formatDate(schedule.next_due_at)}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="text-sm text-gray-600">
-                            <div className="flex items-center gap-2">
-                              <Clock className="w-4 h-4" />
-                              <span>
-                                {daysUntilDue !== null && daysUntilDue <= 0
-                                  ? `${Math.abs(daysUntilDue)} days overdue`
-                                  : daysUntilDue !== null
-                                  ? `Due in ${daysUntilDue} days`
-                                  : "No due date"}
-                              </span>
-                            </div>
-                          </div>
-
-                          {schedule.interval_km && (
-                            <div className="text-sm text-gray-600">
-                              <div className="flex items-center gap-2">
-                                <Gauge className="w-4 h-4" />
-                                <span>Interval: {schedule.interval_km.toLocaleString()} km</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex justify-between items-center pt-3 border-t border-gray-100">
-                          {schedule.createdAt && (
-                            <div className="text-xs text-gray-500">
-                              {formatDate(schedule.createdAt)}
-                            </div>
-                          )}
-                          <button
-                            onClick={() => setScheduleToDelete(schedule._id)}
-                            className="px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 

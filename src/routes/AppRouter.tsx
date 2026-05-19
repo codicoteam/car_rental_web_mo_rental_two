@@ -9,6 +9,7 @@ import Staff from "../pages/admin/StaffPage";
 import RoleSelection from "../pages/admin/RolesPage";
 import SignupScreen from "../pages/public/SignUpPage";
 import SignInScreen from "../pages/public/SignInPage";
+import AdminReservationsPage from "../pages/admin/reservations/AdminReservationsPage";
 //Custormer pages 
 import Dashboardy from "../pages/customer/CustomerDashboardPage";
 import Vihicles from "../pages/customer/Vihicle";
@@ -75,6 +76,7 @@ function App() {
           <Route path="/admin-vehicles" element={<VehicleUnitManagement />} />
           <Route path="/admin-bookings" element={<Bookings />} />
           <Route path="/admin-customers" element={<Customers />} />
+          <Route path="/admin-reservations" element={<AdminReservationsPage />}/>
           <Route path="/admin-staff" element={<Staff />} />
           // customer Routes
           <Route path="/dashboardy" element={<Dashboardy/>} />

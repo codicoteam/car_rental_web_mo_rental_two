@@ -1,5 +1,7 @@
 import axios from "axios";
 
+
+
 const BASE_URL = "http://13.61.185.238:5050/api/v1/driver-profiles";
 
 /**
@@ -78,6 +80,31 @@ export interface DriverProfile {
   __v: number;
 }
 
+export interface UpdateDriverPayload {
+  display_name: string;
+  base_city: string;
+  base_region: string;
+  base_country: string;
+  hourly_rate: number;
+  bio: string;
+  years_experience: number;
+  languages: string[];
+  is_available: boolean;
+  profile_image: string;
+  driver_license: {
+    number: string;
+    imageUrl: string;
+    country: string;
+    class: string;
+    expires_at: string;
+    verified: boolean;
+  };
+  identity_document: {
+    type: string;
+    imageUrl: string;
+  };
+}
+
 // API Response wrapper
 export interface DriverProfilesResponse {
   success: boolean;
@@ -133,6 +160,87 @@ const DriverProfileService = {
       }
     }
   },
+
+  /**
+ * Update a driver profile (PATCH)
+ * PATCH /api/v1/driver-profiles/{id}
+ */
+updateDriverProfile: async (driverId: string, updateData: Partial<DriverProfile>): Promise<DriverProfileResponse> => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.patch<DriverProfileResponse>(`${BASE_URL}/${driverId}`, updateData, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    return response.data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      throw error.response?.data || "Failed to update driver profile";
+    } else {
+      throw "An unexpected error occurred";
+    }
+  }
+},
+
+  /**
+ * Delete a driver profile (DELETE)
+ * DELETE /api/v1/driver-profiles/{id}
+ */
+deleteDriverProfile: async (driverId: string): Promise<{ success: boolean; message?: string }> => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.delete(`${BASE_URL}/${driverId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    return response.data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      throw error.response?.data || "Failed to delete driver profile";
+    } else {
+      throw "An unexpected error occurred";
+    }
+  }
+},
+
+/**
+ * Approve a driver profile (POST)
+ * POST /api/v1/driver-profiles/{id}/approve
+ */
+approveDriverProfile: async (driverId: string): Promise<{ success: boolean; data?: DriverProfile; message?: string }> => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.post(`${BASE_URL}/${driverId}/approve`, {}, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    return response.data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      throw error.response?.data || "Failed to approve driver profile";
+    } else {
+      throw "An unexpected error occurred";
+    }
+  }
+},
+
+/**
+ * Reject a driver profile (POST)
+ * POST /api/v1/driver-profiles/{id}/reject
+ */
+rejectDriverProfile: async (driverId: string, reason: string): Promise<{ success: boolean; data?: DriverProfile; message?: string }> => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.post(`${BASE_URL}/${driverId}/reject`, { reason }, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    return response.data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      throw error.response?.data || "Failed to reject driver profile";
+    } else {
+      throw "An unexpected error occurred";
+    }
+  }
+},
+
 };
 
 export default DriverProfileService;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import type { AppDispatch } from '../../../app/store';
-import ManagerSidebar from "../../../components/ManagerSideBar";
+import Sidebar from "../../../components/ManagerSideBar";
 import { fetchAllIncidents,
      createIncident,
   updateIncident,
@@ -137,7 +137,7 @@ const INCIDENT_TYPES: IncidentType[] = ["accident", "tyre", "scratch", "windshie
 const INCIDENT_SEVERITIES: IncidentSeverity[] = ["minor", "major"];
 const INCIDENT_STATUSES: IncidentStatus[] = ["open", "under_review", "resolved", "written_off"];
 
-const VehicleIncidents: React.FC = () => {
+const AdminVehicleIncidents: React.FC = () => {
   const navigate = useNavigate();
 
   // State
@@ -237,49 +237,25 @@ const loadData = useCallback(async () => {
   try {
     setLoading(true);
     setError(null);
-    
-    const managerBranchId = getManagerBranchId();
-    console.log('Manager Branch ID:', managerBranchId);
-    
+
     const [incidentsResponse, vehiclesResponse, reservationsResponse] = await Promise.all([
       fetchAllIncidents(),
       fetchVehicleUnits(),
       dispatch(fetchReservations()).unwrap(),
     ]);
+
+    setIncidents(incidentsResponse.data);
     
-    // Filter incidents by manager's branch - FIXED with proper null handling
-    const filteredIncidents = incidentsResponse.data.filter(incident => {
-      // Handle cases where branch_id might be null, string, or object
-      let incidentBranchId = null;
-      
-      if (incident.branch_id === null || incident.branch_id === undefined) {
-        incidentBranchId = null;
-      } else if (typeof incident.branch_id === 'string') {
-        incidentBranchId = incident.branch_id;
-      } else if (incident.branch_id._id) {
-        incidentBranchId = incident.branch_id._id;
-      }
-      
-      // Only include incidents that belong to the manager's branch
-      // AND have a valid branch_id (not null)
-      return incidentBranchId !== null && incidentBranchId === managerBranchId;
-    });
-    
-    console.log('Original incidents:', incidentsResponse.data.length);
-    console.log('Filtered incidents:', filteredIncidents.length);
-    console.log('Manager branch ID used:', managerBranchId);
-    
-    setIncidents(filteredIncidents);
-    
+    // Fix for vehicles - use type assertion to any
     const vehicleList = (vehiclesResponse as any)?.data?.items || [];
     setVehicles(vehicleList);
     
+    // Fix for reservations - use type assertion
     const reservationsList = (reservationsResponse as any)?.data || 
                             (Array.isArray(reservationsResponse) ? reservationsResponse : []);
     setReservations(reservationsList);
     
   } catch (err) {
-    console.error('Error in loadData:', err);
     const errorDisplay = getIncidentErrorDisplay(err);
     setError(errorDisplay.message || "Failed to load incidents");
     showSnackbar(errorDisplay.message, "error");
@@ -293,27 +269,11 @@ const loadData = useCallback(async () => {
     loadData();
   }, [loadData]);
 
-  // Add this useEffect after your loadData function
-useEffect(() => {
+  
+ useEffect(() => {
   if (reservations && reservations.length > 0) {
-    const managerBranchId = localStorage.getItem('manager_branch_id');
-    
-    if (!managerBranchId) {
-      console.log('No manager branch ID found');
-      setFilteredReservationsForDropdown([]);
-      return;
-    }
-    
-    // Filter reservations where pickup branch or dropoff branch matches manager's branch
-    const filtered = reservations.filter((reservation: any) => {
-      const pickupBranchId = reservation.pickup?.branch_id?._id || reservation.pickup_branch_id;
-      const dropoffBranchId = reservation.dropoff?.branch_id?._id || reservation.dropoff_branch_id;
-      
-      return pickupBranchId === managerBranchId || dropoffBranchId === managerBranchId;
-    });
-    
-    console.log(`Found ${filtered.length} reservations for branch ${managerBranchId}`);
-    setFilteredReservationsForDropdown(filtered);
+    console.log(`Found ${reservations.length} total reservations`);
+    setFilteredReservationsForDropdown(reservations); // Show ALL reservations
   }
 }, [reservations]);
 
@@ -778,7 +738,7 @@ const handleCreateIncident = async () => {
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans relative overflow-hidden">
-      <ManagerSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Fixed Header */}
@@ -2289,4 +2249,4 @@ const handleCreateIncident = async () => {
   );
 };
 
-export default VehicleIncidents;
+export default AdminVehicleIncidents;

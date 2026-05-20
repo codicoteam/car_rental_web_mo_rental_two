@@ -10,6 +10,8 @@ import RoleSelection from "../pages/admin/RolesPage";
 import SignupScreen from "../pages/public/SignUpPage";
 import SignInScreen from "../pages/public/SignInPage";
 import AdminReservationsPage from "../pages/admin/reservations/AdminReservationsPage";
+import AdminVehicleIncidents from "../pages/admin/incidents/AdminVehicleIncidents";
+import AdminDriverProfiles from "../pages/admin/driver_profiles/AdminDriverProfiles";
 //Custormer pages 
 import Dashboardy from "../pages/customer/CustomerDashboardPage";
 import Vihicles from "../pages/customer/Vihicle";
@@ -77,7 +79,9 @@ function App() {
           <Route path="/admin-bookings" element={<Bookings />} />
           <Route path="/admin-customers" element={<Customers />} />
           <Route path="/admin-reservations" element={<AdminReservationsPage />}/>
+          <Route path="/admin-vehicle-incidents" element={<AdminVehicleIncidents />} />
           <Route path="/admin-staff" element={<Staff />} />
+          <Route path="/admin-driver-profiles" element={<AdminDriverProfiles />} />
           // customer Routes
           <Route path="/dashboardy" element={<Dashboardy/>} />
           <Route path="/vehicle" element={<Vihicles/>} />

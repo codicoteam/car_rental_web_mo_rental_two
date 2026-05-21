@@ -12,6 +12,7 @@ import SignInScreen from "../pages/public/SignInPage";
 import AdminReservationsPage from "../pages/admin/reservations/AdminReservationsPage";
 import AdminVehicleIncidents from "../pages/admin/incidents/AdminVehicleIncidents";
 import AdminDriverProfiles from "../pages/admin/driver_profiles/AdminDriverProfiles";
+import DriverBookingScreen from "../pages/admin/driver_bookings/DriverBookingScreen";
 //Custormer pages 
 import Dashboardy from "../pages/customer/CustomerDashboardPage";
 import Vihicles from "../pages/customer/Vihicle";
@@ -54,6 +55,7 @@ import PromoCodesPage from "../pages/manager/promocodes/PromoCodesPage";
 import VehicleIncidents from "../pages/manager/vehicle_incidents/VehicleIncidents";
 import ManagerDriverBookings from "../pages/manager/driver_bookings/ManagerDriverBookings";
 import DriverProfilesPage from "../pages/manager/driver_profiles/DriverProfilesPage";
+import PaymentsScreen from "../pages/admin/payments/PaymentsScreen";
 
 function App() {
   return (
@@ -82,6 +84,8 @@ function App() {
           <Route path="/admin-vehicle-incidents" element={<AdminVehicleIncidents />} />
           <Route path="/admin-staff" element={<Staff />} />
           <Route path="/admin-driver-profiles" element={<AdminDriverProfiles />} />
+          <Route path="/admin-driver-bookings" element={<DriverBookingScreen />}/>
+          <Route path="/admin-payments" element={<PaymentsScreen />}/>
           // customer Routes
           <Route path="/dashboardy" element={<Dashboardy/>} />
           <Route path="/vehicle" element={<Vihicles/>} />
@@ -89,7 +93,7 @@ function App() {
           <Route path="/orders" element={<Service/>} />
           <Route path="/profile" element={<Profile/>} />
           <Route path="/driver" element={<Drivers/>} />
-          {/* <Route path="/book" element={<CreateReservation/>}/> */}
+         
           {/* <Route path="/book/:id" element={<BookingPage/>} /> */}
           <Route path="/book/:id" element={<CreateReservation/>} />
            <Route path="/chart" element={<ChatScreen/>} />

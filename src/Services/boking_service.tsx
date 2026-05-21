@@ -164,6 +164,26 @@ const BookingDriverService = {
       }
     }
   },
+
+  /**
+ * Delete a driver booking (DELETE)
+ * DELETE /api/v1/driver-bookings/admin/{id}
+ */
+  deleteBooking: async (id: string): Promise<any> => {
+    try {
+      const token = getAuthToken();
+      const response = await axios.delete(`${BASE_URL}/admin/${id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        throw error.response?.data || "Failed to delete driver booking";
+      } else {
+        throw "An unexpected error occurred";
+      }
+    }
+  },
 };
 
 export default BookingDriverService;

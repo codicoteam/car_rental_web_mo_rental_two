@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import type { AppDispatch } from '../../../app/store';
-import Sidebar from "../../../components/ManagerSideBar";
+import Sidebar from "../../../components/Sidebar";
 import { fetchAllIncidents,
      createIncident,
   updateIncident,

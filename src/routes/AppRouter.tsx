@@ -56,6 +56,7 @@ import VehicleIncidents from "../pages/manager/vehicle_incidents/VehicleIncident
 import ManagerDriverBookings from "../pages/manager/driver_bookings/ManagerDriverBookings";
 import DriverProfilesPage from "../pages/manager/driver_profiles/DriverProfilesPage";
 import PaymentsScreen from "../pages/admin/payments/PaymentsScreen";
+import VehicleTrackersScreen from "../pages/admin/vehicle_trackers/VehicleTrackersScreen";
 
 function App() {
   return (
@@ -86,6 +87,7 @@ function App() {
           <Route path="/admin-driver-profiles" element={<AdminDriverProfiles />} />
           <Route path="/admin-driver-bookings" element={<DriverBookingScreen />}/>
           <Route path="/admin-payments" element={<PaymentsScreen />}/>
+          <Route path="/admin-vehicle-trackers" element= {<VehicleTrackersScreen />}/>
           // customer Routes
           <Route path="/dashboardy" element={<Dashboardy/>} />
           <Route path="/vehicle" element={<Vihicles/>} />

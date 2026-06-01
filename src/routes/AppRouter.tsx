@@ -21,7 +21,7 @@ import Service from "../pages/customer/CustomerServicePage";
 import Profile from "../pages/customer/CustomerProfilePage";
 import Drivers from "../pages/customer/CustomerDriversPage";
 import ChatScreen from "../pages/customer/Chat";
-import NotificationScreen from "../pages/customer/notification";
+
 //Agent Pages
 import AgentDashboard from "../pages/agent/agentdashboard";
 import AgentbookingPage from "../pages/agent/agentbooking";
@@ -57,6 +57,9 @@ import ManagerDriverBookings from "../pages/manager/driver_bookings/ManagerDrive
 import DriverProfilesPage from "../pages/manager/driver_profiles/DriverProfilesPage";
 import PaymentsScreen from "../pages/admin/payments/PaymentsScreen";
 import VehicleTrackersScreen from "../pages/admin/vehicle_trackers/VehicleTrackersScreen";
+import AdminReports from "../pages/admin/reports/AdminReports";
+import NotificationScreen from "../pages/customer/notification";
+import AdminNotificationsScreen from "../pages/admin/notifications/NotificationsScreen";
 
 function App() {
   return (
@@ -88,6 +91,8 @@ function App() {
           <Route path="/admin-driver-bookings" element={<DriverBookingScreen />}/>
           <Route path="/admin-payments" element={<PaymentsScreen />}/>
           <Route path="/admin-vehicle-trackers" element= {<VehicleTrackersScreen />}/>
+          <Route path="/admin-notifications" element={<AdminNotificationsScreen />}/>
+          <Route path="admin-reports" element={<AdminReports />}/>
           // customer Routes
           <Route path="/dashboardy" element={<Dashboardy/>} />
           <Route path="/vehicle" element={<Vihicles/>} />

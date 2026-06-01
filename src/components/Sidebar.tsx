@@ -16,6 +16,7 @@ import {
   X,
   BarChart3,
   ShieldCheck,
+  Bell,
 } from "lucide-react";
 import { NavLink , useNavigate} from "react-router-dom";
 import { useState } from "react";
@@ -82,6 +83,8 @@ const Sidebar = ({ isOpen = true, onClose = () => {} }: SidebarProps) => {
 
     // Analytics
     { icon: BarChart3, label: "Reports", path: "/admin-reports" },
+
+    { icon: Bell, label: "Notifications", path: "/admin-notifications" },
 
     // Auth
     // Auth

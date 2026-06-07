@@ -130,6 +130,20 @@ export type CreateVehiclePayload = {
   metadata?: IVehicleMetadata;
 };
 
+// Add this type for service record payload
+export type RecordServicePayload = {
+  date: string; // ISO format: "2025-01-10T09:00:00Z"
+  odometer_km: number;
+};
+
+export interface IServiceRecord {
+  _id?: string;
+  vehicle_id?: string;
+  date: string;
+  odometer_km: number;
+  created_at?: string;
+  updated_at?: string;
+}
 export type UpdateVehiclePayload = Partial<CreateVehiclePayload>;
 
 export type UpdateAvailabilityPayload = {
@@ -225,6 +239,8 @@ export async function createVehicleUnit(
     throw toApiError(err, "Failed to create vehicle unit");
   }
 }
+
+
 
 /**
  * GET /vehicles
@@ -332,6 +348,33 @@ export async function updateVehicleAvailability(
     return res.data?.data || res.data;
   } catch (err) {
     throw toApiError(err, "Failed to update vehicle availability");
+  }
+}
+
+
+/**
+ * POST /vehicles/:id/service
+ * Record a service event for a vehicle.
+ */
+export async function recordVehicleService(
+  vehicleId: string,
+  payload: RecordServicePayload
+): Promise<IServiceRecord> {
+  try {
+    const res = await axios.patch(
+      `${API_BASE}/vehicles/${vehicleId}/service`,
+      payload,
+      {
+        headers: {
+          ...authHeaders(),
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    return res.data?.data || res.data;
+  } catch (err) {
+    throw toApiError(err, "Failed to record vehicle service");
   }
 }
 

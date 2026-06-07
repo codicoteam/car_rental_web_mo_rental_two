@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch } from "../../../app/store";
 import { fetchReservations , removeReservation , updateStatus } from "../../../features/reservation/reservationthunks";
+import { reservationsService } from "../../../Services/reservations_service";
 import Sidebar from "../../../components/Sidebar";
 import {
   Search,
@@ -132,6 +133,11 @@ const error = useSelector(
 const [selectedStatusReservation, setSelectedStatusReservation] = useState<Reservation | null>(null);
 const [selectedNewStatus, setSelectedNewStatus] = useState("");
 const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+// Add these after your existing state declarations
+const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+const [selectedReservationForEdit, setSelectedReservationForEdit] = useState<Reservation | null>(null);
+const [editFormData, setEditFormData] = useState<any>(null);
+const [isUpdatingReservation, setIsUpdatingReservation] = useState(false);
 
   // Snackbar
   const [snackbar, setSnackbar] = useState<{
@@ -284,6 +290,141 @@ const handleConfirmStatusUpdate = async () => {
     showSnackbar(err.message || "Failed to update status", "error");
   } finally {
     setIsUpdatingStatus(false);
+  }
+};
+
+ // Add these after your existing handler functions
+ const openEditModal = (reservation: Reservation) => {
+  setSelectedReservationForEdit(reservation);
+  
+  // Extract branch IDs properly from objects
+  const pickupBranchId = typeof reservation.pickup.branch_id === 'object' 
+    ? (reservation.pickup.branch_id as any)._id || (reservation.pickup.branch_id as any).id || ""
+    : reservation.pickup.branch_id;
+    
+  const dropoffBranchId = typeof reservation.dropoff.branch_id === 'object' 
+    ? (reservation.dropoff.branch_id as any)._id || (reservation.dropoff.branch_id as any).id || ""
+    : reservation.dropoff.branch_id;
+  
+  // Extract vehicle ID properly
+  const vehicleId = typeof reservation.vehicle_id === 'object' 
+    ? (reservation.vehicle_id as any)._id || (reservation.vehicle_id as any).id || ""
+    : reservation.vehicle_id;
+  
+  // Extract vehicle model ID properly
+  const vehicleModelId = typeof reservation.vehicle_model_id === 'object' 
+    ? (reservation.vehicle_model_id as any)._id || (reservation.vehicle_model_id as any).id || ""
+    : reservation.vehicle_model_id;
+  
+  // Set the reservation data directly as the form data with ALL fields
+  setEditFormData({
+    code: reservation.code,
+    user_id: (reservation as any).user_id || "",
+    created_by: (reservation as any).created_by || "",
+    created_channel: (reservation as any).created_channel || "web",
+    vehicle_id: vehicleId,
+    vehicle_model_id: vehicleModelId,
+    pickup: {
+      branch_id: pickupBranchId,
+      at: reservation.pickup.at
+    },
+    dropoff: {
+      branch_id: dropoffBranchId,
+      at: reservation.dropoff.at
+    },
+    status: reservation.status,
+    pricing: {
+      currency: (reservation.pricing as any)?.currency || "USD",
+      breakdown: (reservation.pricing as any)?.breakdown || [],
+      fees: (reservation.pricing as any)?.fees || [],
+      taxes: (reservation.pricing as any)?.taxes || [],
+      discounts: (reservation.pricing as any)?.discounts || [],
+      grand_total: (reservation.pricing as any)?.grand_total?.$numberDecimal || (reservation.pricing as any)?.grand_total || "0",
+      computed_at: (reservation.pricing as any)?.computed_at || new Date().toISOString()
+    },
+    payment_summary: {
+      status: (reservation.payment_summary as any)?.status || "unpaid",
+      paid_total: (reservation.payment_summary as any)?.paid_total?.$numberDecimal || (reservation.payment_summary as any)?.paid_total || "0",
+      outstanding: (reservation.payment_summary as any)?.outstanding?.$numberDecimal || (reservation.payment_summary as any)?.outstanding || "0",
+      last_payment_at: (reservation.payment_summary as any)?.last_payment_at || null
+    },
+    driver_snapshot: {
+      full_name: reservation.driver_snapshot?.full_name || "",
+      phone: reservation.driver_snapshot?.phone || "",
+      email: reservation.driver_snapshot?.email || "",
+      driver_license: {
+        number: reservation.driver_snapshot?.driver_license?.number || "",
+        country: (reservation.driver_snapshot?.driver_license as any)?.country || "ZW",
+        class: reservation.driver_snapshot?.driver_license?.class || "",
+        expires_at: reservation.driver_snapshot?.driver_license?.expires_at || "",
+        verified: reservation.driver_snapshot?.driver_license?.verified || false
+      }
+    },
+    notes: (reservation as any).notes || "",
+    created_at: (reservation as any).created_at || "",
+    updated_at: (reservation as any).updated_at || ""
+  });
+  
+  setIsEditModalOpen(true);
+};
+
+const handleEditFormChange = (section: string, field: string, value: any) => {
+  if (section === 'pickup' || section === 'dropoff') {
+    setEditFormData((prev: any) => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value
+      }
+    }));
+  } else if (section === 'pricing') {
+    setEditFormData((prev: any) => ({
+      ...prev,
+      pricing: {
+        ...prev.pricing,
+        [field]: value
+      }
+    }));
+  } else if (section === 'driver_snapshot') {
+    setEditFormData((prev: any) => ({
+      ...prev,
+      driver_snapshot: {
+        ...prev.driver_snapshot,
+        [field]: value
+      }
+    }));
+  } else if (section === 'driver_license') {
+    setEditFormData((prev: any) => ({
+      ...prev,
+      driver_snapshot: {
+        ...prev.driver_snapshot,
+        driver_license: {
+          ...prev.driver_snapshot?.driver_license,
+          [field]: value
+        }
+      }
+    }));
+  } else {
+    setEditFormData((prev: any) => ({
+      ...prev,
+      [field]: value
+    }));
+  }
+};
+
+const handleUpdateReservation = async () => {
+  if (!selectedReservationForEdit || !editFormData) return;
+  
+  setIsUpdatingReservation(true);
+  try {
+    await reservationsService.updateReservation(selectedReservationForEdit._id, editFormData);
+    showSnackbar("Reservation updated successfully", "success");
+    setIsEditModalOpen(false);
+    dispatch(fetchReservations()); // Refresh the list
+  } catch (err: any) {
+    showSnackbar(err.message || "Failed to update reservation", "error");
+  } finally {
+    setIsUpdatingReservation(false);
   }
 };
 
@@ -598,6 +739,7 @@ const handleConfirmStatusUpdate = async () => {
                                     <Eye className="w-4 h-4 text-gray-600" />
                                   </button>
                                   <button
+                                     onClick={() => openEditModal(reservation)}
                                     className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors"
                                     title="Edit Reservation"
                                   >
@@ -706,6 +848,7 @@ const handleConfirmStatusUpdate = async () => {
       <Eye className="w-3.5 h-3.5 text-gray-600" />
     </button>
     <button
+      onClick={() => openEditModal(reservation)}
       className="p-1.5 bg-white border border-gray-300 rounded-lg hover:bg-blue-50"
     >
       <Edit className="w-3.5 h-3.5 text-blue-600" />
@@ -1030,6 +1173,561 @@ const handleConfirmStatusUpdate = async () => {
           </div>
         </div>
       )}
+
+      {/* Edit Reservation Modal - Side Modal */}
+  {/* Edit Reservation Modal - Side Modal */}
+{isEditModalOpen && selectedReservationForEdit && editFormData && (
+  <div className="fixed inset-0 z-50 overflow-hidden">
+    <div
+      className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+      onClick={() => setIsEditModalOpen(false)}
+    />
+    <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
+      <div className="relative w-screen max-w-4xl">
+        <div className="h-full bg-white shadow-2xl overflow-y-auto">
+          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">Edit Reservation</h2>
+              <p className="text-sm text-gray-600">Update reservation details</p>
+            </div>
+            <button
+              onClick={() => setIsEditModalOpen(false)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Basic Information */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Basic Information</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Reservation Code</label>
+                  <input
+                    type="text"
+                    value={editFormData.code || ""}
+                    onChange={(e) => setEditFormData({...editFormData, code: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                  <select
+                    value={editFormData.status || "pending"}
+                    onChange={(e) => setEditFormData({...editFormData, status: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="active">Active</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">User ID</label>
+                  <input
+                    type="text"
+                    value={editFormData.user_id || ""}
+                    onChange={(e) => setEditFormData({...editFormData, user_id: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Created By</label>
+                  <input
+                    type="text"
+                    value={editFormData.created_by || ""}
+                    onChange={(e) => setEditFormData({...editFormData, created_by: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Created Channel</label>
+                  <select
+                    value={editFormData.created_channel || "web"}
+                    onChange={(e) => setEditFormData({...editFormData, created_channel: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  >
+                    <option value="web">Web</option>
+                    <option value="mobile">Mobile</option>
+                    <option value="admin">Admin</option>
+                    <option value="call_center">Call Center</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Vehicle Information */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Vehicle Information</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle ID</label>
+                  <input
+                    type="text"
+                    value={editFormData.vehicle_id || ""}
+                    onChange={(e) => setEditFormData({...editFormData, vehicle_id: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Model ID</label>
+                  <input
+                    type="text"
+                    value={editFormData.vehicle_model_id || ""}
+                    onChange={(e) => setEditFormData({...editFormData, vehicle_model_id: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Pickup & Dropoff */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Pickup & Dropoff</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Branch ID</label>
+                  <input
+                    type="text"
+                    value={editFormData.pickup?.branch_id || ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData, 
+                      pickup: {...editFormData.pickup, branch_id: e.target.value}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={editFormData.pickup?.at ? editFormData.pickup.at.slice(0, 16) : ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData, 
+                      pickup: {...editFormData.pickup, at: new Date(e.target.value).toISOString()}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Dropoff Branch ID</label>
+                  <input
+                    type="text"
+                    value={editFormData.dropoff?.branch_id || ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData, 
+                      dropoff: {...editFormData.dropoff, branch_id: e.target.value}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Dropoff Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={editFormData.dropoff?.at ? editFormData.dropoff.at.slice(0, 16) : ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData, 
+                      dropoff: {...editFormData.dropoff, at: new Date(e.target.value).toISOString()}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Driver Information */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Driver Information</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                  <input
+                    type="text"
+                    value={editFormData.driver_snapshot?.full_name || ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      driver_snapshot: {...editFormData.driver_snapshot, full_name: e.target.value}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                  <input
+                    type="text"
+                    value={editFormData.driver_snapshot?.phone || ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      driver_snapshot: {...editFormData.driver_snapshot, phone: e.target.value}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={editFormData.driver_snapshot?.email || ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      driver_snapshot: {...editFormData.driver_snapshot, email: e.target.value}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">License Number</label>
+                  <input
+                    type="text"
+                    value={editFormData.driver_snapshot?.driver_license?.number || ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      driver_snapshot: {
+                        ...editFormData.driver_snapshot,
+                        driver_license: {...editFormData.driver_snapshot?.driver_license, number: e.target.value}
+                      }
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">License Country</label>
+                  <input
+                    type="text"
+                    value={editFormData.driver_snapshot?.driver_license?.country || "ZW"}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      driver_snapshot: {
+                        ...editFormData.driver_snapshot,
+                        driver_license: {...editFormData.driver_snapshot?.driver_license, country: e.target.value}
+                      }
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">License Class</label>
+                  <input
+                    type="text"
+                    value={editFormData.driver_snapshot?.driver_license?.class || ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      driver_snapshot: {
+                        ...editFormData.driver_snapshot,
+                        driver_license: {...editFormData.driver_snapshot?.driver_license, class: e.target.value}
+                      }
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">License Expiry</label>
+                  <input
+                    type="datetime-local"
+                    value={editFormData.driver_snapshot?.driver_license?.expires_at ? editFormData.driver_snapshot.driver_license.expires_at.slice(0, 16) : ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      driver_snapshot: {
+                        ...editFormData.driver_snapshot,
+                        driver_license: {...editFormData.driver_snapshot?.driver_license, expires_at: new Date(e.target.value).toISOString()}
+                      }
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">License Verified</label>
+                  <select
+                    value={editFormData.driver_snapshot?.driver_license?.verified ? "true" : "false"}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      driver_snapshot: {
+                        ...editFormData.driver_snapshot,
+                        driver_license: {...editFormData.driver_snapshot?.driver_license, verified: e.target.value === "true"}
+                      }
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  >
+                    <option value="false">No</option>
+                    <option value="true">Yes</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Pricing Section */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Pricing</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                  <input
+                    type="text"
+                    value={editFormData.pricing?.currency || "USD"}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      pricing: {...editFormData.pricing, currency: e.target.value}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Grand Total</label>
+                  <input
+                    type="text"
+                    value={editFormData.pricing?.grand_total || "0"}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      pricing: {...editFormData.pricing, grand_total: e.target.value}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Computed At</label>
+                  <input
+                    type="datetime-local"
+                    value={editFormData.pricing?.computed_at ? editFormData.pricing.computed_at.slice(0, 16) : ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      pricing: {...editFormData.pricing, computed_at: new Date(e.target.value).toISOString()}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+              </div>
+
+              {/* Fees */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fees (JSON)</label>
+                <textarea
+                  value={JSON.stringify(editFormData.pricing?.fees || [], null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const fees = JSON.parse(e.target.value);
+                      setEditFormData({
+                        ...editFormData,
+                        pricing: {...editFormData.pricing, fees}
+                      });
+                    } catch (err) {
+                      // Invalid JSON, ignore
+                    }
+                  }}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm"
+                  placeholder='[{"code": "AIRPORT_FEE", "amount": "10.00"}]'
+                />
+              </div>
+
+              {/* Discounts */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Discounts (JSON)</label>
+                <textarea
+                  value={JSON.stringify(editFormData.pricing?.discounts || [], null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const discounts = JSON.parse(e.target.value);
+                      setEditFormData({
+                        ...editFormData,
+                        pricing: {...editFormData.pricing, discounts}
+                      });
+                    } catch (err) {
+                      // Invalid JSON, ignore
+                    }
+                  }}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm"
+                  placeholder='[{"promo_code_id": "promo01", "amount": "5.00"}]'
+                />
+              </div>
+
+              {/* Taxes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Taxes (JSON)</label>
+                <textarea
+                  value={JSON.stringify(editFormData.pricing?.taxes || [], null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const taxes = JSON.parse(e.target.value);
+                      setEditFormData({
+                        ...editFormData,
+                        pricing: {...editFormData.pricing, taxes}
+                      });
+                    } catch (err) {
+                      // Invalid JSON, ignore
+                    }
+                  }}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm"
+                  placeholder='[{"code": "VAT", "rate": 0.15, "amount": "24.00"}]'
+                />
+              </div>
+
+              {/* Breakdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Pricing Breakdown (JSON)</label>
+                <textarea
+                  value={JSON.stringify(editFormData.pricing?.breakdown || [], null, 2)}
+                  onChange={(e) => {
+                    try {
+                      const breakdown = JSON.parse(e.target.value);
+                      setEditFormData({
+                        ...editFormData,
+                        pricing: {...editFormData.pricing, breakdown}
+                      });
+                    } catch (err) {
+                      // Invalid JSON, ignore
+                    }
+                  }}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm"
+                  placeholder='[{"label": "Base daily rate", "quantity": 3, "unit_amount": "50.00", "total": "150.00"}]'
+                />
+              </div>
+            </div>
+
+            {/* Payment Summary */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Payment Summary</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
+                  <select
+                    value={editFormData.payment_summary?.status || "unpaid"}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      payment_summary: {...editFormData.payment_summary, status: e.target.value}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  >
+                    <option value="unpaid">Unpaid</option>
+                    <option value="paid">Paid</option>
+                    <option value="partial">Partial</option>
+                    <option value="refunded">Refunded</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Paid Total</label>
+                  <input
+                    type="text"
+                    value={editFormData.payment_summary?.paid_total || "0"}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      payment_summary: {...editFormData.payment_summary, paid_total: e.target.value}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Outstanding</label>
+                  <input
+                    type="text"
+                    value={editFormData.payment_summary?.outstanding || "0"}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      payment_summary: {...editFormData.payment_summary, outstanding: e.target.value}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Payment At</label>
+                  <input
+                    type="datetime-local"
+                    value={editFormData.payment_summary?.last_payment_at ? editFormData.payment_summary.last_payment_at.slice(0, 16) : ""}
+                    onChange={(e) => setEditFormData({
+                      ...editFormData,
+                      payment_summary: {...editFormData.payment_summary, last_payment_at: e.target.value ? new Date(e.target.value).toISOString() : null}
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Additional Notes</h3>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                <textarea
+                  value={editFormData.notes || ""}
+                  onChange={(e) => setEditFormData({...editFormData, notes: e.target.value})}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  placeholder="Additional notes about this reservation..."
+                />
+              </div>
+            </div>
+
+            {/* Created/Updated Timestamps */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Timestamps</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Created At</label>
+                  <input
+                    type="datetime-local"
+                    value={editFormData.created_at ? editFormData.created_at.slice(0, 16) : ""}
+                    onChange={(e) => setEditFormData({...editFormData, created_at: new Date(e.target.value).toISOString()})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Updated At</label>
+                  <input
+                    type="datetime-local"
+                    value={editFormData.updated_at ? editFormData.updated_at.slice(0, 16) : ""}
+                    onChange={(e) => setEditFormData({...editFormData, updated_at: new Date(e.target.value).toISOString()})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateReservation}
+                disabled={isUpdatingReservation}
+                className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 flex items-center gap-2"
+              >
+                {isUpdatingReservation ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Updating...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Status Update Modal */}
 {showStatusModal && selectedStatusReservation && (

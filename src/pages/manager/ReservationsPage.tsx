@@ -1,24 +1,64 @@
-// src/pages/ManagerReservations.tsx
-import { useState, useEffect } from 'react';
-import { Clock, Search, Menu, Phone, Mail, AlertCircle, Filter, X, Eye, User, Car, CreditCard, FileText, CalendarDays, Tag, Gauge, Shield, Image, Store } from 'lucide-react';
-import { useDispatch, useSelector } from 'react-redux';
-import ManagerSidebar from '../../components/ManagerSideBar';
-import { fetchReservations } from '../../features/reservation/reservationthunks';
-import { selectReservations, selectReservationsLoading, selectReservationsError } from '../../features/reservation/reservationSelectors';
+// src/pages/AdminReservationsPage.tsx
+import React, { useState, useEffect, useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import type { AppDispatch } from "../../app/store";
+import { fetchReservations , removeReservation , updateStatus } from "../../features/reservation/reservationthunks";
+import { reservationsService } from "../../Services/reservations_service";
+import ManagerSidebar from "../../components/ManagerSideBar";
+import {
+  Search,
+  Eye,
+  Plus,
+  Filter,
+  X,
+  AlertCircle,
+  CheckCircle,
+  MoreVertical,
+  Calendar,
+  Clock,
+  Car,
+  RefreshCw,
+  User,
+  CreditCard,
+  MapPin,
+  Phone,
+  Mail,
+  DollarSign,
+  Hash,
+  Tag,
+  Gauge,
+  AlertTriangle,
+  Building,
+  FileText,
+  Image as ImageIcon,
+  Edit,
+  Trash2  
+} from "lucide-react";
 
-import type { AppDispatch } from '../../app/store';
-
-interface ApiReservation {
+// Types based on your API response
+interface Reservation {
   _id: string;
   code: string;
-  created_at: string;
   status: string;
+  created_at: string;
   pickup: {
-    branch_id: { _id: string; name: string; address?: string };
+    branch_id: {
+      _id?: string;
+      name: string;
+      address?: {
+        city?: string;
+      };
+    };
     at: string;
   };
   dropoff: {
-    branch_id: { _id: string; name: string; address?: string };
+    branch_id: {
+      _id?: string;
+      name: string;
+      address?: {
+        city?: string;
+      };
+    };
     at: string;
   };
   driver_snapshot: {
@@ -27,7 +67,6 @@ interface ApiReservation {
     email: string;
     driver_license: {
       number: string;
-      country: string;
       class: string;
       expires_at: string;
       verified: boolean;
@@ -43,12 +82,7 @@ interface ApiReservation {
       seats?: number;
       doors?: number;
       features?: string[];
-      gps_device_id?: string;
-      notes?: string;
     };
-    status: string;
-    availability_state: string;
-    vehicle_model_id: string;
   };
   vehicle_model_id: {
     make: string;
@@ -59,27 +93,13 @@ interface ApiReservation {
   pricing: {
     currency: string;
     grand_total: { $numberDecimal: string };
-    breakdown: Array<{ label: string; quantity: number; unit_amount: { $numberDecimal: string }; total: { $numberDecimal: string } }>;
-    fees: Array<{ code: string; amount: { $numberDecimal: string } }>;
-    taxes: Array<{ code: string; rate: number; amount: { $numberDecimal: string } }>;
-    discounts: Array<{ code: string; amount: { $numberDecimal: string } }>;
+    breakdown: Array<{ label: string; quantity: number; total: { $numberDecimal: string } }>;
   };
   payment_summary: {
     status: string;
     paid_total: { $numberDecimal: string };
     outstanding: { $numberDecimal: string };
-    last_payment_at: string | null;
   };
-  notes: string;
-  user_id: {
-    full_name: string;
-    email: string;
-  };
-  created_by: {
-    full_name: string;
-    email: string;
-  };
-  created_channel: string;
 }
 
 interface TransformedReservation {
@@ -97,408 +117,464 @@ interface TransformedReservation {
   vin: string;
   color: string;
   odometer: string;
-  vehicleStatus: string;
-  availabilityState: string;
-  seats: number;
-  doors: number;
-  features: string[];
-  gpsDeviceId: string;
-  vehicleNotes: string;
   photos: string[];
   startDate: string;
   endDate: string;
+  startDateTime: string;
+  endDateTime: string;
+  startFormatted: string;
+  endFormatted: string;
   status: string;
+  rawStatus: string;
   totalAmount: string;
   pickupLocation: string;
   dropoffLocation: string;
-   pickupBranchId: string;
+  pickupBranchId: string;
   dropoffBranchId: string;
-  duration: string;
+  duration: number;
   createdDate: string;
-  createdBy: string;
-  createdChannel: string;
-  licenseClass: string;
-  licenseCountry: string;
-  licenseExpiry: string;
-  licenseVerified: boolean;
   paymentStatus: string;
   paidAmount: string;
   outstandingAmount: string;
-  currency: string;
-  notes: string;
-  pricingBreakdown: Array<{ label: string; quantity: number; unitAmount: string; total: string }>;
-  fees: Array<{ code: string; amount: string }>;
-  taxes: Array<{ code: string; rate: number; amount: string }>;
-  discounts: Array<{ code: string; amount: string }>;
+  seats: number;
+  doors: number;
+  features: string[];
+  licenseClass: string;
+  licenseNumber: string;
+  licenseVerified: boolean;
+  pricingBreakdown: Array<{ label: string; quantity: number; total: { $numberDecimal: string } }>;
 }
 
-const ManagerReservations = () => {
+const ReservationsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const apiResponse = useSelector(selectReservations);
-  const isLoading = useSelector(selectReservationsLoading);
-  const error = useSelector(selectReservationsError);
+  
+  const apiResponse = useSelector(
+    (state: any) => state.reservations.reservations
+  );
+
+  const reservations: Reservation[] = apiResponse?.data || [];
+
+  const loading = useSelector(
+    (state: any) => state.reservations?.isLoading
+  );
+
+  const error = useSelector(
+    (state: any) => state.reservations?.error
+  );
   
   const [selectedTab, setSelectedTab] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [selectedReservation, setSelectedReservation] = useState<TransformedReservation | null>(null);
-  const [statusUpdateLoading, setStatusUpdateLoading] = useState<string | null>(null);
+  const [reservationToDelete, setReservationToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedStatusReservation, setSelectedStatusReservation] = useState<Reservation | null>(null);
+  const [selectedNewStatus, setSelectedNewStatus] = useState("");
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedReservationForEdit, setSelectedReservationForEdit] = useState<Reservation | null>(null);
+  const [editFormData, setEditFormData] = useState<any>(null);
+  const [isUpdatingReservation, setIsUpdatingReservation] = useState(false);
 
-  const [managerBranches, setManagerBranches] = useState<any[]>([]);
-  const [loadingBranches, setLoadingBranches] = useState(false);
-  const [selectedBranch, setSelectedBranch] = useState<any>(null);
-
-  // Helper function to get auth data from local storage
-  const getAuthFromLocalStorage = () => {
-  try {
-    const authData = localStorage.getItem('car_rental_auth');
-    if (authData) {
-      return JSON.parse(authData);
-    }
-    return null;
-  } catch (error) {
-    console.error('Error parsing auth data from localStorage:', error);
-    return null;
-  }
-};
-
-// Helper function to get manager branch ID from localStorage
-const getManagerBranchId = (): string | null => {
-  try {
-    // First try to get from stored branch data
-    const branchData = localStorage.getItem('manager_branch_data');
-    if (branchData) {
-      const parsed = JSON.parse(branchData);
-      return parsed._id;
-    }
-    // Fallback to just the branch ID
-    const branchId = localStorage.getItem('manager_branch_id');
-    return branchId;
-  } catch (error) {
-    console.error('Error getting manager branch ID from localStorage:', error);
-    return null;
-  }
-};
-
- // Fetch manager's branches based on user ID from localStorage
-
-
-  useEffect(() => {
-    
-    dispatch(fetchReservations());
-   
-  }, [dispatch]);
-
-  const transformReservations = (apiRes: any): TransformedReservation[] => {
-    if (!apiRes?.success || !Array.isArray(apiRes.data)) return [];
-    
-    return apiRes.data.map((res: ApiReservation) => {
-      const pickupDate = new Date(res.pickup.at);
-      const dropoffDate = new Date(res.dropoff.at);
-      const durationMs = dropoffDate.getTime() - pickupDate.getTime();
-      const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
-      const durationHours = Math.ceil(durationMs / (1000 * 60 * 60));
-      
-      let duration = '';
-      if (durationDays >= 1) {
-        duration = `${durationDays} day${durationDays !== 1 ? 's' : ''}`;
-      } else {
-        duration = `${durationHours} hour${durationHours !== 1 ? 's' : ''}`;
+  // Helper function to get manager branch ID from localStorage
+  const getManagerBranchId = (): string | null => {
+    try {
+      const branchData = localStorage.getItem('manager_branch_data');
+      if (branchData) {
+        const parsed = JSON.parse(branchData);
+        return parsed._id;
       }
-      
-      const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric', month: 'short', day: 'numeric'
-      });
-
-      const formatCurrency = (amount: string | number, currency = 'USD') => {
-        const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(num || 0);
-      };
-
-      return {
-        id: res._id,
-        code: res.code,
-        customer: res.driver_snapshot?.full_name || 'N/A',
-        email: res.driver_snapshot?.email || 'N/A',
-        phone: res.driver_snapshot?.phone || 'N/A',
-        vehicleName: `${res.vehicle_model_id?.make || ''} ${res.vehicle_model_id?.model || ''}`.trim(),
-        make: res.vehicle_model_id?.make || 'N/A',
-        model: res.vehicle_model_id?.model || 'N/A',
-        year: res.vehicle_model_id?.year || 0,
-        vehicleClass: res.vehicle_model_id?.class || 'N/A',
-        plateNumber: res.vehicle_id?.plate_number || 'N/A',
-        vin: res.vehicle_id?.vin || 'N/A',
-        color: res.vehicle_id?.color || 'N/A',
-        odometer: `${res.vehicle_id?.odometer_km?.toLocaleString() || '0'} km`,
-        vehicleStatus: res.vehicle_id?.status || 'N/A',
-        availabilityState: res.vehicle_id?.availability_state || 'N/A',
-        seats: res.vehicle_id?.metadata?.seats || 0,
-        doors: res.vehicle_id?.metadata?.doors || 0,
-        features: res.vehicle_id?.metadata?.features || [],
-        gpsDeviceId: res.vehicle_id?.metadata?.gps_device_id || 'N/A',
-        vehicleNotes: res.vehicle_id?.metadata?.notes || 'No notes',
-        photos: res.vehicle_id?.photos || [],
-        startDate: formatDate(res.pickup.at),
-        endDate: formatDate(res.dropoff.at),
-        status: res.status.charAt(0).toUpperCase() + res.status.slice(1),
-        totalAmount: formatCurrency(res.pricing?.grand_total?.$numberDecimal || 0, res.pricing?.currency),
-        pickupLocation: res.pickup.branch_id?.name || 'N/A',
-        dropoffLocation: res.dropoff.branch_id?.name || 'N/A',
-        // Add these two properties inside the return object of transformReservations
-        pickupBranchId: res.pickup.branch_id?._id || '',
-        dropoffBranchId: res.dropoff.branch_id?._id || '',
-        duration: duration,
-        createdDate: formatDate(res.created_at),
-        createdBy: res.created_by?.full_name || 'N/A',
-        createdChannel: res.created_channel || 'N/A',
-        licenseClass: res.driver_snapshot?.driver_license?.class || 'N/A',
-        licenseCountry: res.driver_snapshot?.driver_license?.country || 'N/A',
-        licenseExpiry: res.driver_snapshot?.driver_license?.expires_at ? formatDate(res.driver_snapshot.driver_license.expires_at) : 'N/A',
-        licenseVerified: res.driver_snapshot?.driver_license?.verified || false,
-        paymentStatus: res.payment_summary?.status || 'N/A',
-        paidAmount: formatCurrency(res.payment_summary?.paid_total?.$numberDecimal || 0, res.pricing?.currency),
-        outstandingAmount: formatCurrency(res.payment_summary?.outstanding?.$numberDecimal || 0, res.pricing?.currency),
-        currency: res.pricing?.currency || 'USD',
-        notes: res.notes || 'No notes',
-        pricingBreakdown: res.pricing?.breakdown?.map(item => ({
-          label: item.label,
-          quantity: item.quantity,
-          unitAmount: formatCurrency(item.unit_amount?.$numberDecimal || 0, res.pricing?.currency),
-          total: formatCurrency(item.total?.$numberDecimal || 0, res.pricing?.currency)
-        })) || [],
-        fees: res.pricing?.fees?.map(fee => ({
-          code: fee.code,
-          amount: formatCurrency(fee.amount?.$numberDecimal || 0, res.pricing?.currency)
-        })) || [],
-        taxes: res.pricing?.taxes?.map(tax => ({
-          code: tax.code,
-          rate: tax.rate,
-          amount: formatCurrency(tax.amount?.$numberDecimal || 0, res.pricing?.currency)
-        })) || [],
-        discounts: res.pricing?.discounts?.map(discount => ({
-          code: discount.code,
-          amount: formatCurrency(discount.amount?.$numberDecimal || 0, res.pricing?.currency)
-        })) || []
-      };
-    });
+      const branchId = localStorage.getItem('manager_branch_id');
+      return branchId;
+    } catch (error) {
+      console.error('Error getting manager branch ID from localStorage:', error);
+      return null;
+    }
   };
 
-  const reservations = transformReservations(apiResponse);
+  // Snackbar
+  const [snackbar, setSnackbar] = useState<{
+    show: boolean;
+    message: string;
+    type: "success" | "error" | "info";
+  }>({ show: false, message: "", type: "info" });
 
-  // Filter reservations by manager's branch ID
-const filterReservationsByBranch = (reservationsList: TransformedReservation[]): TransformedReservation[] => {
-  const managerBranchId = getManagerBranchId();
-  
-  if (!managerBranchId) {
-    console.log('No manager branch ID found in localStorage');
-    return [];
-  }
-  
-  
-  
-  // Get pickup and dropoff branch IDs from the reservation data
-  // Note: You need to add pickupBranchId and dropoffBranchId to your TransformedReservation interface
-  const filtered = reservationsList.filter(reservation => {
-    // You'll need to extract branch IDs during transformation
-    // For now, this shows the logic
-    const pickupBranchId = (reservation as any).pickupBranchId;
-    const dropoffBranchId = (reservation as any).dropoffBranchId;
+  useEffect(() => {
+    dispatch(fetchReservations());
+  }, [dispatch]);
+
+  const showSnackbar = (message: string, type: "success" | "error" | "info") => {
+    setSnackbar({ show: true, message, type });
+    setTimeout(() => {
+      setSnackbar((prev) => ({ ...prev, show: false }));
+    }, 3000);
+  };
+
+  // Transform reservation for display - ADD pickupBranchId and dropoffBranchId
+  const transformReservation = (res: Reservation): TransformedReservation => {
+    const pickupDate = new Date(res.pickup.at);
+    const dropoffDate = new Date(res.dropoff.at);
+    const durationDays = Math.ceil((dropoffDate.getTime() - pickupDate.getTime()) / (1000 * 60 * 60 * 24));
     
-    return pickupBranchId === managerBranchId || dropoffBranchId === managerBranchId;
-  });
-  
-  console.log(`Found ${filtered.length} reservations for branch ${managerBranchId}`);
-  return filtered;
-};
+    const formatDate = (date: string) => {
+      return new Date(date).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric"
+      });
+    };
 
-  const handleStatusUpdate = async (reservationId: string, newStatus: string) => {
-    setStatusUpdateLoading(reservationId);
+    const formatDateTime = (date: string) => {
+      return new Date(date).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    };
+
+    const formatCurrency = (amount: string) => {
+      const num = parseFloat(amount);
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: res.pricing?.currency || "USD"
+      }).format(num || 0);
+    };
+
+    const pickupBranchId = res.pickup.branch_id?._id || '';
+    const dropoffBranchId = res.dropoff.branch_id?._id || '';
+
+    return {
+      id: res._id,
+      code: res.code,
+      customer: res.driver_snapshot?.full_name || "N/A",
+      email: res.driver_snapshot?.email || "N/A",
+      phone: res.driver_snapshot?.phone || "N/A",
+      vehicleName: `${res.vehicle_model_id?.make || ""} ${res.vehicle_model_id?.model || ""}`.trim(),
+      make: res.vehicle_model_id?.make || "N/A",
+      model: res.vehicle_model_id?.model || "N/A",
+      year: res.vehicle_model_id?.year || 0,
+      vehicleClass: res.vehicle_model_id?.class || "N/A",
+      plateNumber: res.vehicle_id?.plate_number || "N/A",
+      vin: res.vehicle_id?.vin || "N/A",
+      color: res.vehicle_id?.color || "N/A",
+      odometer: res.vehicle_id?.odometer_km?.toLocaleString() || "0",
+      photos: res.vehicle_id?.photos || [],
+      startDate: formatDate(res.pickup.at),
+      endDate: formatDate(res.dropoff.at),
+      startDateTime: res.pickup.at,
+      endDateTime: res.dropoff.at,
+      startFormatted: formatDateTime(res.pickup.at),
+      endFormatted: formatDateTime(res.dropoff.at),
+      status: res.status?.charAt(0).toUpperCase() + res.status?.slice(1) || "Pending",
+      rawStatus: res.status,
+      totalAmount: formatCurrency(res.pricing?.grand_total?.$numberDecimal || "0"),
+      pickupLocation: res.pickup.branch_id?.name || "N/A",
+      dropoffLocation: res.dropoff.branch_id?.name || "N/A",
+      pickupBranchId: pickupBranchId,
+      dropoffBranchId: dropoffBranchId,
+      duration: durationDays,
+      createdDate: formatDate(res.created_at),
+      paymentStatus: res.payment_summary?.status || "unpaid",
+      paidAmount: formatCurrency(res.payment_summary?.paid_total?.$numberDecimal || "0"),
+      outstandingAmount: formatCurrency(res.payment_summary?.outstanding?.$numberDecimal || "0"),
+      seats: res.vehicle_id?.metadata?.seats || 4,
+      doors: res.vehicle_id?.metadata?.doors || 4,
+      features: res.vehicle_id?.metadata?.features || [],
+      licenseClass: res.driver_snapshot?.driver_license?.class || "N/A",
+      licenseNumber: res.driver_snapshot?.driver_license?.number || "N/A",
+      licenseVerified: res.driver_snapshot?.driver_license?.verified || false,
+      pricingBreakdown: res.pricing?.breakdown || []
+    };
+  };
+
+  // First transform all reservations
+  const allReservations = reservations.map(transformReservation);
+
+  // Filter reservations by manager's branch ID - COPIED FROM ManagerReservations.tsx
+  const filterReservationsByBranch = (reservationsList: TransformedReservation[]): TransformedReservation[] => {
+    const managerBranchId = getManagerBranchId();
+    
+    if (!managerBranchId) {
+      console.log('No manager branch ID found in localStorage');
+      return [];
+    }
+    
+    const filtered = reservationsList.filter(reservation => {
+      const pickupBranchId = (reservation as any).pickupBranchId;
+      const dropoffBranchId = (reservation as any).dropoffBranchId;
+      
+      return pickupBranchId === managerBranchId || dropoffBranchId === managerBranchId;
+    });
+    
+    console.log(`Found ${filtered.length} reservations for branch ${managerBranchId}`);
+    return filtered;
+  };
+
+  // Then filter by manager's branch
+  const branchFilteredReservations = filterReservationsByBranch(allReservations);
+
+  // Then apply tab and search filters
+  const filteredReservations = branchFilteredReservations.filter(res => {
+    const matchesTab = selectedTab === 'all' || res.status.toLowerCase() === selectedTab;
+    const matchesSearch = searchTerm === "" ||
+      res.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      res.vehicleName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      res.code.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesTab && matchesSearch;
+  });
+
+  // Statistics
+  const stats = {
+    total: branchFilteredReservations.length,
+    pending: branchFilteredReservations.filter(r => r.rawStatus === "pending").length,
+    active: branchFilteredReservations.filter(r => r.rawStatus === "active").length,
+    completed: branchFilteredReservations.filter(r => r.rawStatus === "completed").length,
+  };
+
+  const handleDeleteReservation = async (reservationId: string) => {
+    setIsDeleting(true);
     try {
-    //   await dispatch(updateReservationStatus({ id: reservationId, status: newStatus })).unwrap();
-      dispatch(fetchReservations());
-    } catch (err) {
-      console.error('Error updating reservation status:', err);
+      await dispatch(removeReservation(reservationId)).unwrap();
+      showSnackbar("Reservation deleted successfully", "success");
+      setReservationToDelete(null);
+    } catch (err: any) {
+      showSnackbar(err.message || "Failed to delete reservation", "error");
+    }
+    finally{
+      setIsDeleting(false)
+    }
+  };
+
+  const openStatusModal = (reservation: Reservation) => {
+    setSelectedStatusReservation(reservation);
+    setSelectedNewStatus(reservation.status);
+    setShowStatusModal(true);
+  };
+
+  const handleConfirmStatusUpdate = async () => {
+    if (!selectedStatusReservation || !selectedNewStatus) return;
+    
+    setIsUpdatingStatus(true);
+    try {
+      await dispatch(updateStatus({ 
+        reservationId: selectedStatusReservation._id, 
+        status: selectedNewStatus 
+      })).unwrap();
+      showSnackbar(`Reservation status updated to ${selectedNewStatus}`, "success");
+      setShowStatusModal(false);
+      setSelectedStatusReservation(null);
+    } catch (err: any) {
+      showSnackbar(err.message || "Failed to update status", "error");
     } finally {
-      setStatusUpdateLoading(null);
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const openEditModal = (reservation: Reservation) => {
+    setSelectedReservationForEdit(reservation);
+    
+    const pickupBranchId = typeof reservation.pickup.branch_id === 'object' 
+      ? (reservation.pickup.branch_id as any)._id || (reservation.pickup.branch_id as any).id || ""
+      : reservation.pickup.branch_id;
+      
+    const dropoffBranchId = typeof reservation.dropoff.branch_id === 'object' 
+      ? (reservation.dropoff.branch_id as any)._id || (reservation.dropoff.branch_id as any).id || ""
+      : reservation.dropoff.branch_id;
+    
+    const vehicleId = typeof reservation.vehicle_id === 'object' 
+      ? (reservation.vehicle_id as any)._id || (reservation.vehicle_id as any).id || ""
+      : reservation.vehicle_id;
+    
+    const vehicleModelId = typeof reservation.vehicle_model_id === 'object' 
+      ? (reservation.vehicle_model_id as any)._id || (reservation.vehicle_model_id as any).id || ""
+      : reservation.vehicle_model_id;
+    
+    setEditFormData({
+      code: reservation.code,
+      user_id: (reservation as any).user_id || "",
+      created_by: (reservation as any).created_by || "",
+      created_channel: (reservation as any).created_channel || "web",
+      vehicle_id: vehicleId,
+      vehicle_model_id: vehicleModelId,
+      pickup: {
+        branch_id: pickupBranchId,
+        at: reservation.pickup.at
+      },
+      dropoff: {
+        branch_id: dropoffBranchId,
+        at: reservation.dropoff.at
+      },
+      status: reservation.status,
+      pricing: {
+        currency: (reservation.pricing as any)?.currency || "USD",
+        breakdown: (reservation.pricing as any)?.breakdown || [],
+        fees: (reservation.pricing as any)?.fees || [],
+        taxes: (reservation.pricing as any)?.taxes || [],
+        discounts: (reservation.pricing as any)?.discounts || [],
+        grand_total: (reservation.pricing as any)?.grand_total?.$numberDecimal || (reservation.pricing as any)?.grand_total || "0",
+        computed_at: (reservation.pricing as any)?.computed_at || new Date().toISOString()
+      },
+      payment_summary: {
+        status: (reservation.payment_summary as any)?.status || "unpaid",
+        paid_total: (reservation.payment_summary as any)?.paid_total?.$numberDecimal || (reservation.payment_summary as any)?.paid_total || "0",
+        outstanding: (reservation.payment_summary as any)?.outstanding?.$numberDecimal || (reservation.payment_summary as any)?.outstanding || "0",
+        last_payment_at: (reservation.payment_summary as any)?.last_payment_at || null
+      },
+      driver_snapshot: {
+        full_name: reservation.driver_snapshot?.full_name || "",
+        phone: reservation.driver_snapshot?.phone || "",
+        email: reservation.driver_snapshot?.email || "",
+        driver_license: {
+          number: reservation.driver_snapshot?.driver_license?.number || "",
+          country: (reservation.driver_snapshot?.driver_license as any)?.country || "ZW",
+          class: reservation.driver_snapshot?.driver_license?.class || "",
+          expires_at: reservation.driver_snapshot?.driver_license?.expires_at || "",
+          verified: reservation.driver_snapshot?.driver_license?.verified || false
+        }
+      },
+      notes: (reservation as any).notes || "",
+      created_at: (reservation as any).created_at || "",
+      updated_at: (reservation as any).updated_at || ""
+    });
+    
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateReservation = async () => {
+    if (!selectedReservationForEdit || !editFormData) return;
+    
+    setIsUpdatingReservation(true);
+    try {
+      await reservationsService.updateReservation(selectedReservationForEdit._id, editFormData);
+      showSnackbar("Reservation updated successfully", "success");
+      setIsEditModalOpen(false);
+      dispatch(fetchReservations());
+    } catch (err: any) {
+      showSnackbar(err.message || "Failed to update reservation", "error");
+    } finally {
+      setIsUpdatingReservation(false);
     }
   };
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      pending: 'bg-gradient-to-r from-amber-500 to-amber-600 text-white',
-      confirmed: 'bg-gradient-to-r from-blue-500 to-blue-600 text-white',
-      active: 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white',
-      completed: 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white',
-      cancelled: 'bg-gradient-to-r from-rose-500 to-rose-600 text-white'
+      pending: "bg-amber-100 text-amber-800 border-amber-200",
+      confirmed: "bg-blue-100 text-blue-800 border-blue-200",
+      active: "bg-cyan-100 text-cyan-800 border-cyan-200",
+      completed: "bg-emerald-100 text-emerald-800 border-emerald-200",
+      cancelled: "bg-rose-100 text-rose-800 border-rose-200"
     };
-    return colors[status.toLowerCase()] || 'bg-gradient-to-r from-gray-500 to-gray-600 text-white';
+    return colors[status.toLowerCase()] || "bg-gray-100 text-gray-800 border-gray-200";
   };
 
   const getPaymentStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      paid: 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white',
-      unpaid: 'bg-gradient-to-r from-rose-500 to-rose-600 text-white',
-      partial: 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
+      paid: "bg-emerald-100 text-emerald-800",
+      unpaid: "bg-rose-100 text-rose-800",
+      partial: "bg-amber-100 text-amber-800"
     };
-    return colors[status.toLowerCase()] || 'bg-gradient-to-r from-gray-500 to-gray-600 text-white';
+    return colors[status.toLowerCase()] || "bg-gray-100 text-gray-800";
   };
 
-  const getVehicleStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      active: 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white',
-      available: 'bg-gradient-to-r from-green-500 to-green-600 text-white',
-      unavailable: 'bg-gradient-to-r from-rose-500 to-rose-600 text-white',
-      maintenance: 'bg-gradient-to-r from-amber-500 to-amber-600 text-white'
-    };
-    return colors[status.toLowerCase()] || 'bg-gradient-to-r from-gray-500 to-gray-600 text-white';
+  const openViewModal = (reservation: Reservation) => {
+    setSelectedReservation(reservation);
+    setIsViewModalOpen(true);
   };
-
-  const getStatusActions = (status: string) => {
-    const actions = [];
-    switch(status.toLowerCase()) {
-      case 'pending':
-        actions.push({ label: 'Confirm', value: 'confirmed', color: 'bg-blue-600' });
-        actions.push({ label: 'Cancel', value: 'cancelled', color: 'bg-rose-600' });
-        break;
-      case 'confirmed':
-        actions.push({ label: 'Start Rental', value: 'active', color: 'bg-cyan-600' });
-        actions.push({ label: 'Cancel', value: 'cancelled', color: 'bg-rose-600' });
-        break;
-      case 'active':
-        actions.push({ label: 'Complete', value: 'completed', color: 'bg-emerald-600' });
-        break;
-    }
-    return actions;
-  };
-
- // First transform all reservations
-const allReservations = transformReservations(apiResponse);
-
-// Then filter by manager's branch
-const branchFilteredReservations = filterReservationsByBranch(allReservations);
-
-// Then apply tab and search filters
-const filteredReservations = branchFilteredReservations.filter(res => {
-  const matchesTab = selectedTab === 'all' || res.status.toLowerCase() === selectedTab;
-  const matchesSearch = res.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        res.vehicleName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        res.code.toLowerCase().includes(searchTerm.toLowerCase());
-  return matchesTab && matchesSearch;
-});
-
-
- // Statistics (use branchFilteredReservations instead of reservations)
-const stats = {
-  total: branchFilteredReservations.length,
-  pending: branchFilteredReservations.filter(r => r.status.toLowerCase() === 'pending').length,
-  active: branchFilteredReservations.filter(r => r.status.toLowerCase() === 'active').length,
-  completed: branchFilteredReservations.filter(r => r.status.toLowerCase() === 'completed').length,
-  totalRevenue: branchFilteredReservations.reduce((sum, r) => {
-    const amount = parseFloat(r.totalAmount.replace(/[^0-9.-]+/g, ''));
-    return sum + (isNaN(amount) ? 0 : amount);
-  }, 0)
-};
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex">
-      
-      <div className="fixed inset-y-0 left-0 z-50">
-        <ManagerSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      </div>
+    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+      {/* Sidebar - Fixed */}
+      <ManagerSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col lg:ml-74">
-        {/* Navbar */}
-        <nav className="fixed top-0 right-0 left-0 lg:left-74 z-40 bg-white/95 backdrop-blur-xl shadow-lg border-b border-slate-200">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16 sm:h-20">
-              <div className="flex items-center">
-                <button onClick={() => setSidebarOpen(true)} className="lg:hidden mr-3 p-2 rounded-xl bg-gradient-to-r from-slate-100 to-blue-50 hover:from-slate-200 hover:to-blue-100 transition-all">
-                  <Menu className="w-5 h-5 text-slate-700" />
-                </button>
-                <div className="hidden sm:flex items-center space-x-2 text-sm">
-                  <span className="text-slate-600">Dashboard</span>
-                  <span className="text-slate-300">›</span>
-                  <span className="font-bold bg-gradient-to-r from-blue-800 to-cyan-600 bg-clip-text text-transparent">Branch Reservations</span>
-                </div>
-                <div className="sm:hidden">
-                  <span className="font-bold text-lg bg-gradient-to-r from-blue-800 to-cyan-600 bg-clip-text text-transparent">Reservations</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="text-right hidden sm:block">
-                  <p className="text-sm font-bold text-slate-800">Branch Manager</p>
-                  <p className="text-xs text-slate-500">Manager Portal</p>
-                </div>
-                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-r from-emerald-700 to-teal-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Store className="w-5 h-5 text-white" />
-                </div>
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header - Fixed */}
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="lg:hidden mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">Reservations Management</h1>
+                <p className="text-sm text-gray-600 mt-1">Manage and track all vehicle reservations</p>
               </div>
             </div>
+           
           </div>
-        </nav>
+        </div>
 
-        {/* Main Content */}
-        <div className="flex-1 overflow-y-auto pt-16 sm:pt-20">
-          <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-7">
-              <div className="bg-gradient-to-br from-white to-blue-50 rounded-2xl p-5 shadow-lg border border-slate-200/60">
-                <p className="text-slate-500 text-sm mb-1">Total Reservations</p>
-                <p className="text-3xl font-bold text-slate-800">{stats.total}</p>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Stats Overview */}
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Reservations</p>
+                    <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
+                  </div>
+                  <div className="p-2 bg-blue-50 rounded-lg">
+                    <Car className="w-6 h-6 text-[#1EA2E4]" />
+                  </div>
+                </div>
               </div>
-              <div className="bg-gradient-to-br from-white to-amber-50 rounded-2xl p-5 shadow-lg border border-slate-200/60">
-                <p className="text-slate-500 text-sm mb-1">Pending</p>
-                <p className="text-3xl font-bold text-amber-600">{stats.pending}</p>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Pending</p>
+                    <p className="text-2xl font-bold text-amber-600">{stats.pending}</p>
+                  </div>
+                  <div className="p-2 bg-amber-50 rounded-lg">
+                    <Clock className="w-6 h-6 text-amber-500" />
+                  </div>
+                </div>
               </div>
-              <div className="bg-gradient-to-br from-white to-cyan-50 rounded-2xl p-5 shadow-lg border border-slate-200/60">
-                <p className="text-slate-500 text-sm mb-1">Active</p>
-                <p className="text-3xl font-bold text-cyan-600">{stats.active}</p>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Active</p>
+                    <p className="text-2xl font-bold text-cyan-600">{stats.active}</p>
+                  </div>
+                  <div className="p-2 bg-cyan-50 rounded-lg">
+                    <Car className="w-6 h-6 text-cyan-500" />
+                  </div>
+                </div>
               </div>
-              <div className="bg-gradient-to-br from-white to-emerald-50 rounded-2xl p-5 shadow-lg border border-slate-200/60">
-                <p className="text-slate-500 text-sm mb-1">Completed</p>
-                <p className="text-3xl font-bold text-emerald-600">{stats.completed}</p>
-              </div>
-              <div className="bg-gradient-to-br from-white to-purple-50 rounded-2xl p-5 shadow-lg border border-slate-200/60">
-                <p className="text-slate-500 text-sm mb-1">Total Revenue</p>
-                <p className="text-2xl font-bold text-purple-600">${stats.totalRevenue.toLocaleString()}</p>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Completed</p>
+                    <p className="text-2xl font-bold text-emerald-600">{stats.completed}</p>
+                  </div>
+                  <div className="p-2 bg-emerald-50 rounded-lg">
+                    <CheckCircle className="w-6 h-6 text-emerald-500" />
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Error State */}
-            {error && !isLoading && (
-              <div className="bg-gradient-to-r from-rose-50/90 to-rose-100/70 rounded-2xl shadow-xl p-5 sm:p-7 mb-7 sm:mb-9 border border-rose-200/60 backdrop-blur-sm">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-rose-500 to-rose-600 flex items-center justify-center shadow-lg">
-                    <AlertCircle className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-rose-800 font-bold text-lg">Error loading reservations</p>
-                    <p className="text-rose-700 text-sm mt-1">{error}</p>
-                  </div>
-                  <button
-                    onClick={() => dispatch(fetchReservations())}
-                    className="bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-700 hover:to-rose-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Search and Filter */}
-            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-5 sm:p-7 mb-7 sm:mb-9 border border-slate-200/60">
+            {/* Filters & Search */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
               <div className="flex flex-col gap-5">
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-600/5 to-cyan-500/5 rounded-2xl -m-1 group-hover:opacity-100 opacity-0 transition-opacity"></div>
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
                     type="text"
                     placeholder="Search reservations by customer, vehicle, or code..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="relative w-full pl-12 pr-4 py-3.5 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 bg-white/50"
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent transition-all"
                   />
                 </div>
                 <div className="hidden sm:flex gap-2">
@@ -508,626 +584,428 @@ const stats = {
                       onClick={() => setSelectedTab(tab)}
                       className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
                         selectedTab === tab
-                          ? 'bg-gradient-to-r from-blue-700 to-cyan-500 text-white shadow-lg'
-                          : 'bg-gradient-to-r from-slate-100 to-blue-50 text-slate-700 hover:shadow-md'
+                          ? 'bg-[#1EA2E4] text-white shadow-lg'
+                          : 'bg-gray-100 text-gray-700 hover:shadow-md'
                       }`}
                     >
                       {tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                   ))}
                 </div>
-                <button onClick={() => setShowMobileFilters(true)} className="sm:hidden flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-slate-100 to-blue-50 text-slate-700 rounded-xl font-bold">
+                <button onClick={() => setShowMobileFilters(true)} className="sm:hidden flex items-center gap-3 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold">
                   <Filter className="w-4 h-4" />
                   <span>Filter</span>
                 </button>
               </div>
             </div>
+          </div>
 
-            {/* Loading */}
-            {isLoading && (
-              <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-10 sm:p-14 text-center border border-slate-200/60">
-                <div className="relative inline-block">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 border-4 border-blue-500/20 rounded-full"></div>
-                  <div className="absolute top-0 left-0 w-16 h-16 sm:w-20 sm:h-20 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                </div>
-                <p className="text-lg text-slate-700 font-bold mt-6">Loading branch reservations...</p>
-              </div>
-            )}
+               
 
-            {/* Count */}
-            {!isLoading && (
-              <div className="mb-5">
-                <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-50/80 to-cyan-50/50 rounded-xl px-4 py-2.5 border border-slate-200/60">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 flex items-center justify-center">
-                    <Tag className="w-4 h-4 text-white" />
-                  </div>
-                  <p className="text-slate-700">
-                    Showing <span className="font-bold text-slate-900">{filteredReservations.length}</span> reservation{filteredReservations.length !== 1 ? 's' : ''}
-                  </p>
+          {/* Reservations Grid */}
+          <div className="px-6 pb-6">
+            {loading ? (
+              <div className="flex justify-center items-center h-64">
+                <div className="flex flex-col items-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1EA2E4] mb-4"></div>
+                  <p className="text-gray-600">Loading reservations...</p>
                 </div>
               </div>
-            )}
-
-            {/* Reservation Cards */}
-            {!isLoading && !error && (
-              <div className="grid grid-cols-1 gap-5 sm:gap-7">
-                {filteredReservations.map((reservation) => (
-                  <div key={reservation.id} className="group">
-                    {/* Desktop View */}
-                    <div className="hidden sm:block bg-gradient-to-br from-white to-blue-50/30 rounded-2xl shadow-xl overflow-hidden border border-slate-200/60 hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-1">
-                      <div className="flex">
-                        {/* Car Image Section */}
-                        <div className="w-64 relative overflow-hidden bg-gradient-to-br from-slate-900/90 to-slate-800/90">
-                          {reservation.photos && reservation.photos.length > 0 ? (
-                            <>
-                              <img 
-                                src={reservation.photos[0]} 
-                                alt={reservation.vehicleName}
-                                className="w-full h-full object-cover opacity-70"
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center h-64 p-6">
+                <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+                <p className="text-red-600 text-center mb-4">{error}</p>
+                <button
+                  onClick={() => dispatch(fetchReservations())}
+                  className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors flex items-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Retry
+                </button>
+              </div>
+            ) : filteredReservations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 p-6">
+                <Car className="w-20 h-20 text-gray-300 mb-4" />
+                <p className="text-gray-500 text-lg mb-2">No reservations found</p>
+                <p className="text-gray-400 text-center mb-6">
+                  {searchTerm || selectedTab !== "all"
+                    ? "Try adjusting your filters or search terms"
+                    : "No reservations found for your branch"}
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Desktop Grid */}
+                <div className="hidden lg:block">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredReservations.map((res) => {
+                      const originalRes = reservations.find(r => r._id === res.id);
+                      return (
+                        <div
+                          key={res.id}
+                          className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col"
+                        >
+                          {/* Vehicle Image */}
+                          {res.photos && res.photos.length > 0 && (
+                            <div className="h-40 overflow-hidden">
+                              <img
+                                src={res.photos[0]}
+                                alt={res.vehicleName}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = `https://via.placeholder.com/400x200/1EA2E4/ffffff?text=${encodeURIComponent(res.vehicleName)}`;
+                                }}
                               />
-                              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/40"></div>
-                            </>
-                          ) : (
-                            <div className="w-full h-full bg-gradient-to-br from-blue-900/80 to-cyan-800/80 flex items-center justify-center">
-                              <Car className="w-16 h-16 text-white/60" />
                             </div>
                           )}
-                          <div className="absolute bottom-0 left-0 right-0 p-4">
-                            <div className="flex items-center gap-2">
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-600/90 to-cyan-500/90 flex items-center justify-center shadow-lg">
-                                <Car className="w-5 h-5 text-white" />
-                              </div>
+
+                          <div className="p-6 flex-1">
+                            <div className="flex justify-between items-start mb-4">
                               <div>
-                                <p className="text-white font-bold text-lg">{reservation.vehicleName}</p>
-                                <p className="text-white/80 text-sm">{reservation.year} • {reservation.vehicleClass}</p>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <h3 className="text-lg font-bold text-gray-900">
+                                    {res.vehicleName}
+                                  </h3>
+                                  <span
+                                    className={`px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(res.rawStatus)}`}
+                                  >
+                                    {res.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Hash className="w-4 h-4" />
+                                  <span className="font-mono">{res.code}</span>
+                                </div>
                               </div>
                             </div>
+
+                            <div className="mb-4">
+                              <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                                <User className="w-4 h-4" />
+                                <span className="font-medium">{res.customer}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                <Mail className="w-3 h-3" />
+                                <span>{res.email}</span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2 mb-4">
+                              <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-2 text-gray-600">
+                                  <Calendar className="w-4 h-4" />
+                                  <span>Pick-up</span>
+                                </div>
+                                <span className="font-medium text-gray-800">{res.startDate}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-2 text-gray-600">
+                                  <Calendar className="w-4 h-4" />
+                                  <span>Drop-off</span>
+                                </div>
+                                <span className="font-medium text-gray-800">{res.endDate}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-lg">
+                              <div>
+                                <p className="text-xs text-gray-500">Total Amount</p>
+                                <p className="text-xl font-bold text-[#1EA2E4]">{res.totalAmount}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs text-gray-500">Payment</p>
+                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPaymentStatusColor(res.paymentStatus)}`}>
+                                  {res.paymentStatus.toUpperCase()}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2 text-sm text-gray-600">
+                              <div className="flex items-center gap-2">
+                                <MapPin className="w-3.5 h-3.5" />
+                                <span className="truncate">{res.pickupLocation}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <MapPin className="w-3.5 h-3.5" />
+                                <span className="truncate">{res.dropoffLocation}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 flex justify-end gap-2">
+                            <button
+                              onClick={() => originalRes && openStatusModal(originalRes)}
+                              className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                              title="Update Status"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => originalRes && openViewModal(originalRes)}
+                              className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4 text-gray-600" />
+                            </button>
+                            <button
+                              onClick={() => originalRes && openEditModal(originalRes)}
+                              className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors"
+                              title="Edit Reservation"
+                            >
+                              <Edit className="w-4 h-4 text-blue-600" />
+                            </button>
+                            <button
+                              onClick={() => setReservationToDelete(res.id)}
+                              className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-red-50 transition-colors"
+                              title="Delete Reservation"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </button>
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
-                        {/* Card Content */}
-                        <div className="flex-1 p-6">
-                          <div className="flex items-start justify-between mb-6">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-3">
-                                <h3 className="text-2xl font-bold text-slate-900">{reservation.customer}</h3>
-                                <span className={`px-4 py-2 rounded-xl font-bold ${getStatusColor(reservation.status)} shadow-md`}>
-                                  {reservation.status}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-4 text-slate-600 mb-4">
-                                <div className="flex items-center gap-2">
-                                  <Mail className="w-4 h-4" />
-                                  <span className="text-sm">{reservation.email}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Phone className="w-4 h-4" />
-                                  <span className="text-sm">{reservation.phone}</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-4 flex-wrap">
-                                <span className="px-3 py-1.5 bg-gradient-to-r from-blue-50 to-cyan-50 text-blue-700 font-bold rounded-lg">
-                                  {reservation.code}
-                                </span>
-                                <span className="px-3 py-1.5 bg-gradient-to-r from-slate-50 to-slate-100 text-slate-700 font-bold rounded-lg">
-                                  Plate: {reservation.plateNumber}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <div className="w-3 h-3 rounded-full" style={{backgroundColor: reservation.color.toLowerCase()}}></div>
-                                  <span className="text-sm font-semibold text-slate-700">{reservation.color}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm text-slate-500 mb-2">Total Amount</p>
-                              <p className="text-3xl font-bold bg-gradient-to-r from-blue-800 to-cyan-600 bg-clip-text text-transparent">
-                                {reservation.totalAmount}
-                              </p>
-                              <p className="text-slate-500 text-sm mt-1">Created: {reservation.createdDate}</p>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-4 mb-6">
-                            <div className="bg-gradient-to-br from-white to-blue-50/50 rounded-xl p-4 border border-slate-200/60">
-                              <p className="text-sm text-slate-500 mb-2">Pick-up</p>
-                              <p className="font-bold text-slate-800 text-lg">{reservation.startDate}</p>
-                              <p className="text-slate-600 text-sm">{reservation.pickupLocation}</p>
-                            </div>
-                            <div className="bg-gradient-to-br from-white to-cyan-50/50 rounded-xl p-4 border border-slate-200/60">
-                              <p className="text-sm text-slate-500 mb-2">Return</p>
-                              <p className="font-bold text-slate-800 text-lg">{reservation.endDate}</p>
-                              <p className="text-slate-600 text-sm">{reservation.dropoffLocation}</p>
-                            </div>
-                            <div className="bg-gradient-to-br from-white to-emerald-50/50 rounded-xl p-4 border border-slate-200/60">
-                              <p className="text-sm text-slate-500 mb-2">Payment Status</p>
-                              <span className={`px-3 py-1.5 rounded-lg font-bold ${getPaymentStatusColor(reservation.paymentStatus)} mb-2 inline-block`}>
-                                {reservation.paymentStatus.toUpperCase()}
-                              </span>
-                              <p className="text-rose-600 font-bold">{reservation.outstandingAmount} outstanding</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-6">
-                              <div className="flex items-center gap-2 text-slate-600">
-                                <Gauge className="w-4 h-4" />
-                                <span className="font-medium">{reservation.odometer}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-slate-600">
-                                <Shield className="w-4 h-4" />
-                                <span className={`px-2 py-1 rounded text-xs font-bold ${getVehicleStatusColor(reservation.vehicleStatus)}`}>
-                                  {reservation.vehicleStatus}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {getStatusActions(reservation.status).map(action => (
-                                <button
-                                  key={action.value}
-                                  onClick={() => handleStatusUpdate(reservation.id, action.value)}
-                                  disabled={statusUpdateLoading === reservation.id}
-                                  className={`px-5 py-2.5 ${action.color} hover:opacity-90 text-white font-bold rounded-xl shadow-lg flex items-center gap-2 disabled:opacity-50`}
-                                >
-                                  {statusUpdateLoading === reservation.id ? (
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                  ) : (
-                                    action.label
-                                  )}
-                                </button>
-                              ))}
-                              <button 
-                                onClick={() => setSelectedReservation(reservation)}
-                                className="px-5 py-2.5 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white font-bold rounded-xl shadow-lg flex items-center gap-2"
-                              >
-                                <Eye className="w-4 h-4" />
-                                Details
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Mobile View */}
-                    <div className="sm:hidden bg-gradient-to-br from-white to-blue-50/30 rounded-2xl shadow-lg overflow-hidden border border-slate-200/60">
-                      <div className="relative h-48 bg-gradient-to-br from-slate-900 to-slate-800">
-                        {reservation.photos && reservation.photos.length > 0 ? (
-                          <>
-                            <img 
-                              src={reservation.photos[0]} 
-                              alt={reservation.vehicleName}
-                              className="w-full h-full object-cover opacity-60"
+                {/* Mobile Cards */}
+                <div className="lg:hidden space-y-4">
+                  {filteredReservations.map((res) => {
+                    const originalRes = reservations.find(r => r._id === res.id);
+                    return (
+                      <div
+                        key={res.id}
+                        className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col"
+                      >
+                        {res.photos && res.photos.length > 0 && (
+                          <div className="h-32 overflow-hidden">
+                            <img
+                              src={res.photos[0]}
+                              alt={res.vehicleName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = `https://via.placeholder.com/400x200/1EA2E4/ffffff?text=${encodeURIComponent(res.vehicleName)}`;
+                              }}
                             />
-                            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/30 to-black/50"></div>
-                          </>
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-blue-900 to-cyan-800 flex items-center justify-center">
-                            <Car className="w-12 h-12 text-white/50" />
                           </div>
                         )}
-                        <div className="absolute bottom-4 left-4 right-4">
-                          <div className="flex items-center justify-between">
+
+                        <div className="p-4 flex-1">
+                          <div className="flex justify-between items-start mb-3">
                             <div>
-                              <p className="text-white font-bold">{reservation.vehicleName}</p>
-                              <p className="text-white/80 text-sm">{reservation.year} • {reservation.vehicleClass}</p>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-bold text-gray-900">{res.vehicleName}</h3>
+                                <span
+                                  className={`px-2 py-0.5 text-xs font-medium rounded-full border ${getStatusColor(res.rawStatus)}`}
+                                >
+                                  {res.status}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600 font-mono">{res.code}</p>
                             </div>
-                            <div className="text-right">
-                              <p className="text-xl font-bold text-white">{reservation.totalAmount}</p>
+                          </div>
+
+                          <div className="mb-3">
+                            <p className="font-medium text-gray-900">{res.customer}</p>
+                            <p className="text-xs text-gray-500">{res.email}</p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                              <p className="text-xs text-gray-500">Pick-up</p>
+                              <p className="text-sm font-medium">{res.startDate}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Drop-off</p>
+                              <p className="text-sm font-medium">{res.endDate}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mb-3 pt-2">
+                            <div>
+                              <p className="text-lg font-bold text-[#1EA2E4]">{res.totalAmount}</p>
+                              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getPaymentStatusColor(res.paymentStatus)}`}>
+                                {res.paymentStatus}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              <div className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3" />
+                                <span className="truncate max-w-[100px]">{res.pickupLocation}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-slate-900">{reservation.customer}</h3>
-                            <span className={`px-2 py-1 rounded-lg text-xs font-bold ${getStatusColor(reservation.status)}`}>
-                              {reservation.status}
-                            </span>
-                          </div>
-                          <span className="px-2 py-1 bg-gradient-to-r from-blue-50 to-cyan-50 text-blue-700 text-xs font-bold rounded">
-                            {reservation.code}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 mb-4">
-                          <div className="bg-gradient-to-br from-white to-blue-50/50 rounded-lg p-3">
-                            <p className="text-xs text-slate-500 mb-1">Pick-up</p>
-                            <p className="font-bold text-slate-800">{reservation.startDate}</p>
-                            <p className="text-slate-600 text-xs">{reservation.pickupLocation}</p>
-                          </div>
-                          <div className="bg-gradient-to-br from-white to-cyan-50/50 rounded-lg p-3">
-                            <p className="text-xs text-slate-500 mb-1">Return</p>
-                            <p className="font-bold text-slate-800">{reservation.endDate}</p>
-                            <p className="text-slate-600 text-xs">{reservation.dropoffLocation}</p>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {getStatusActions(reservation.status).map(action => (
-                            <button
-                              key={action.value}
-                              onClick={() => handleStatusUpdate(reservation.id, action.value)}
-                              disabled={statusUpdateLoading === reservation.id}
-                              className={`flex-1 py-2 ${action.color} text-white font-bold rounded-lg text-sm disabled:opacity-50`}
-                            >
-                              {statusUpdateLoading === reservation.id ? '...' : action.label}
-                            </button>
-                          ))}
-                          <button 
-                            onClick={() => setSelectedReservation(reservation)}
-                            className="flex-1 py-2 bg-gradient-to-r from-slate-600 to-slate-700 text-white font-bold rounded-lg text-sm"
+                        <div className="border-t border-gray-100 p-3 bg-gray-50 flex flex-wrap gap-2 justify-end">
+                          <button
+                            onClick={() => originalRes && openStatusModal(originalRes)}
+                            className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
                           >
-                            Details
+                            <RefreshCw className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => originalRes && openViewModal(originalRes)}
+                            className="p-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-gray-600" />
+                          </button>
+                          <button
+                            onClick={() => originalRes && openEditModal(originalRes)}
+                            className="p-1.5 bg-white border border-gray-300 rounded-lg hover:bg-blue-50"
+                          >
+                            <Edit className="w-3.5 h-3.5 text-blue-600" />
+                          </button>
+                          <button
+                            onClick={() => setReservationToDelete(res.id)}
+                            className="p-1.5 bg-white border border-gray-300 rounded-lg hover:bg-red-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-red-600" />
                           </button>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {!isLoading && !error && filteredReservations.length === 0 && (
-              <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-10 sm:p-14 text-center border border-slate-200/60">
-                <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-6 rounded-full bg-gradient-to-r from-blue-100 to-cyan-100 flex items-center justify-center shadow-lg">
-                  <AlertCircle className="w-10 h-10 sm:w-12 sm:h-12 text-slate-400" />
+                    );
+                  })}
                 </div>
-                <p className="text-xl sm:text-2xl text-slate-700 font-bold mb-2">No reservations found</p>
-                <p className="text-slate-500">Try adjusting your filters or search terms</p>
-              </div>
+              </>
             )}
-
           </div>
         </div>
+      </div>
 
-        {/* Details Modal - Same as customer version */}
-        {selectedReservation && (
-          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-gradient-to-br from-white to-slate-50/80 rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto border border-slate-200/60">
-              <div className="sticky top-0 bg-gradient-to-r from-white to-blue-50/50 backdrop-blur-sm border-b border-slate-200/60 px-7 py-5 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 flex items-center justify-center shadow-lg">
-                    <Eye className="w-6 h-6 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-900">Reservation Details</h2>
-                    <p className="text-slate-600 text-sm">{selectedReservation.code}</p>
-                  </div>
-                </div>
-                <button onClick={() => setSelectedReservation(null)} className="p-2.5 hover:bg-slate-100 rounded-xl">
-                  <X className="w-6 h-6 text-slate-600" />
-                </button>
+      {/* View Reservation Details Modal */}
+      {isViewModalOpen && selectedReservation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsViewModalOpen(false)}
+          />
+          <div className="relative bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">Reservation Details</h2>
+                <p className="text-sm text-gray-600">Complete reservation information</p>
               </div>
+              <button
+                onClick={() => setIsViewModalOpen(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
 
-              <div className="p-7 space-y-7">
-                {/* Status Update Section for Manager */}
-                <div className="bg-gradient-to-br from-blue-50/50 to-cyan-50/50 rounded-2xl p-6 border border-slate-200/60">
-                  <div className="flex items-center gap-3 mb-5">
-                    <div className="w-11 h-11 rounded-lg bg-gradient-to-r from-blue-500/10 to-cyan-500/10 flex items-center justify-center">
-                      <Clock className="w-6 h-6 text-blue-600" />
+            <div className="overflow-y-auto p-8" style={{ maxHeight: "calc(90vh - 80px)" }}>
+              {(() => {
+                const details = transformReservation(selectedReservation);
+                return (
+                  <div className="space-y-8">
+                    <div className="flex flex-wrap gap-3 pb-4 border-b border-gray-200">
+                      <span className={`px-3 py-1.5 rounded-full text-sm font-semibold border ${getStatusColor(details.rawStatus)}`}>
+                        {details.status}
+                      </span>
+                      <span className={`px-3 py-1.5 rounded-full text-sm font-semibold ${getPaymentStatusColor(details.paymentStatus)}`}>
+                        {details.paymentStatus.toUpperCase()}
+                      </span>
+                      <span className="px-3 py-1.5 bg-gray-100 rounded-full text-sm font-semibold text-gray-700">
+                        {details.duration} Day{details.duration !== 1 ? "s" : ""}
+                      </span>
                     </div>
-                    <h3 className="text-xl font-bold text-slate-800">Update Reservation Status</h3>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <span className="px-4 py-2 rounded-lg font-bold bg-slate-100 text-slate-700">
-                      Current: {selectedReservation.status}
-                    </span>
-                    {getStatusActions(selectedReservation.status).map(action => (
-                      <button
-                        key={action.value}
-                        onClick={() => {
-                          handleStatusUpdate(selectedReservation.id, action.value);
-                          setSelectedReservation(null);
-                        }}
-                        className={`px-5 py-2.5 ${action.color} text-white font-bold rounded-xl shadow-lg hover:opacity-90 transition-all`}
-                      >
-                        Mark as {action.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
 
-                {/* Car Photos Gallery */}
-                {selectedReservation.photos.length > 0 && (
-                  <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-slate-200/60">
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-11 h-11 rounded-lg bg-gradient-to-r from-blue-500/10 to-cyan-500/10 flex items-center justify-center">
-                        <Image className="w-6 h-6 text-blue-600" />
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-800">Vehicle Photos</h3>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {selectedReservation.photos.slice(0, 4).map((photo, index) => (
-                        <div key={index} className="relative rounded-xl overflow-hidden border border-slate-200/60 shadow-sm">
-                          <img 
-                            src={photo} 
-                            alt={`${selectedReservation.vehicleName} ${index + 1}`}
-                            className="w-full h-48 object-cover"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Customer Info */}
-                  <div className="bg-gradient-to-br from-white to-blue-50/30 rounded-2xl p-6 border border-slate-200/60">
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-11 h-11 rounded-lg bg-gradient-to-r from-blue-500/10 to-cyan-500/10 flex items-center justify-center">
-                        <User className="w-6 h-6 text-blue-600" />
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-800">Customer Information</h3>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1.5">Full Name</p>
-                          <p className="font-bold text-slate-800">{selectedReservation.customer}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1.5">Email</p>
-                          <p className="font-bold text-slate-800">{selectedReservation.email}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1.5">Phone</p>
-                          <p className="font-bold text-slate-800">{selectedReservation.phone}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1.5">Driver License</p>
-                          <p className="font-bold text-slate-800">{selectedReservation.licenseClass}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1">License Country</p>
-                          <span className="px-2.5 py-1.5 bg-gradient-to-r from-slate-500/10 to-slate-600/10 text-slate-700 font-bold rounded-lg text-sm">
-                            {selectedReservation.licenseCountry}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1">License Verified</p>
-                          <span className={`px-2.5 py-1.5 font-bold rounded-lg text-sm ${
-                            selectedReservation.licenseVerified 
-                              ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 text-emerald-700'
-                              : 'bg-gradient-to-r from-amber-500/10 to-amber-600/10 text-amber-700'
-                          }`}>
-                            {selectedReservation.licenseVerified ? 'Verified' : 'Not Verified'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Vehicle Info */}
-                  <div className="bg-gradient-to-br from-white to-emerald-50/30 rounded-2xl p-6 border border-slate-200/60">
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-11 h-11 rounded-lg bg-gradient-to-r from-emerald-500/10 to-green-500/10 flex items-center justify-center">
-                        <Car className="w-6 h-6 text-emerald-600" />
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-800">Vehicle Information</h3>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1.5">Vehicle Name</p>
-                          <p className="font-bold text-slate-800 text-lg">{selectedReservation.vehicleName}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1.5">Year</p>
-                          <p className="font-bold text-slate-800">{selectedReservation.year}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1.5">Plate Number</p>
-                          <p className="font-bold text-slate-800 text-blue-800">{selectedReservation.plateNumber}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1.5">VIN</p>
-                          <p className="font-bold text-slate-800 font-mono">{selectedReservation.vin}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full" style={{backgroundColor: selectedReservation.color.toLowerCase()}}></div>
-                          <div>
-                            <p className="text-sm text-slate-500">Color</p>
-                            <p className="font-bold text-slate-800">{selectedReservation.color}</p>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1.5">Odometer</p>
-                          <p className="font-bold text-slate-800">{selectedReservation.odometer}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1">Vehicle Status</p>
-                          <span className={`px-2.5 py-1.5 rounded-lg font-bold ${getVehicleStatusColor(selectedReservation.vehicleStatus)}`}>
-                            {selectedReservation.vehicleStatus}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500 mb-1">Availability</p>
-                          <span className={`px-2.5 py-1.5 rounded-lg font-bold ${getVehicleStatusColor(selectedReservation.availabilityState)}`}>
-                            {selectedReservation.availabilityState}
-                          </span>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-sm text-slate-500 mb-1.5">Vehicle Class</p>
-                        <span className="px-4 py-2 bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 text-emerald-800 font-bold rounded-lg">
-                          {selectedReservation.vehicleClass}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Rental Period */}
-                  <div className="bg-gradient-to-br from-white to-violet-50/30 rounded-2xl p-6 border border-slate-200/60">
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-11 h-11 rounded-lg bg-gradient-to-r from-violet-500/10 to-purple-500/10 flex items-center justify-center">
-                        <CalendarDays className="w-6 h-6 text-violet-600" />
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-800">Rental Period</h3>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white rounded-xl p-4 border border-slate-200/80">
-                          <p className="text-sm text-slate-500 mb-2">Pick-up Date</p>
-                          <p className="font-bold text-slate-800 text-lg">{selectedReservation.startDate}</p>
-                          <p className="text-slate-600 text-sm mt-2">{selectedReservation.pickupLocation}</p>
-                        </div>
-                        <div className="bg-white rounded-xl p-4 border border-slate-200/80">
-                          <p className="text-sm text-slate-500 mb-2">Return Date</p>
-                          <p className="font-bold text-slate-800 text-lg">{selectedReservation.endDate}</p>
-                          <p className="text-slate-600 text-sm mt-2">{selectedReservation.dropoffLocation}</p>
-                        </div>
-                      </div>
-                      <div className="bg-gradient-to-r from-blue-50/50 to-cyan-50/50 rounded-xl p-5">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-slate-500">Duration</p>
-                            <p className="font-bold text-slate-800 text-2xl">{selectedReservation.duration}</p>
-                          </div>
-                          <div className="w-14 h-14 rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 flex items-center justify-center shadow-lg">
-                            <Clock className="w-7 h-7 text-white" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Payment Info */}
-                  <div className="bg-gradient-to-br from-white to-rose-50/30 rounded-2xl p-6 border border-slate-200/60">
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-11 h-11 rounded-lg bg-gradient-to-r from-rose-500/10 to-pink-500/10 flex items-center justify-center">
-                        <CreditCard className="w-6 h-6 text-rose-600" />
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-800">Payment Information</h3>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className={`px-5 py-2.5 rounded-xl font-bold ${getPaymentStatusColor(selectedReservation.paymentStatus)}`}>
-                          {selectedReservation.paymentStatus.toUpperCase()}
-                        </span>
-                        <div className="text-right">
-                          <p className="text-sm text-slate-500">Total Amount</p>
-                          <p className="font-bold text-blue-800 text-xl">{selectedReservation.totalAmount}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white rounded-xl p-4 border border-slate-200/80">
-                          <p className="text-sm text-slate-500 mb-2">Paid Amount</p>
-                          <p className="font-bold text-emerald-600 text-xl">{selectedReservation.paidAmount}</p>
-                        </div>
-                        <div className="bg-white rounded-xl p-4 border border-slate-200/80">
-                          <p className="text-sm text-slate-500 mb-2">Outstanding</p>
-                          <p className="font-bold text-rose-600 text-xl">{selectedReservation.outstandingAmount}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <p className="text-sm text-slate-500">Currency</p>
-                          <span className="px-3 py-1.5 bg-gradient-to-r from-blue-500/10 to-blue-600/10 text-blue-700 font-bold rounded-lg">
-                            {selectedReservation.currency}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm text-slate-500">Created By</p>
-                          <p className="font-bold text-slate-800">{selectedReservation.createdBy}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Pricing Breakdown */}
-                  {selectedReservation.pricingBreakdown.length > 0 && (
-                    <div className="lg:col-span-2 bg-gradient-to-br from-white to-amber-50/30 rounded-2xl p-6 border border-slate-200/60">
-                      <div className="flex items-center gap-3 mb-5">
-                        <div className="w-11 h-11 rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 flex items-center justify-center">
-                          <FileText className="w-6 h-6 text-amber-600" />
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-800">Pricing Breakdown</h3>
-                      </div>
-                      <div className="space-y-3">
-                        {selectedReservation.pricingBreakdown.map((item, idx) => (
-                          <div key={idx} className="flex justify-between items-center py-2 border-b border-slate-200">
-                            <div>
-                              <p className="font-medium text-slate-800">{item.label}</p>
-                              <p className="text-sm text-slate-500">Quantity: {item.quantity} × {item.unitAmount}</p>
+                    {details.photos.length > 0 && (
+                      <div className="bg-gray-50 rounded-xl p-6">
+                        <h4 className="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">Vehicle Photos</h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                          {details.photos.slice(0, 3).map((photo, idx) => (
+                            <div key={idx} className="rounded-lg overflow-hidden border border-gray-200 aspect-video">
+                              <img src={photo} alt={`${details.vehicleName} ${idx + 1}`} className="w-full h-full object-cover" />
                             </div>
-                            <p className="font-bold text-slate-800">{item.total}</p>
-                          </div>
-                        ))}
-                        {selectedReservation.fees.map((fee, idx) => (
-                          <div key={`fee-${idx}`} className="flex justify-between items-center py-2">
-                            <p className="text-slate-600">Fee: {fee.code}</p>
-                            <p className="font-medium text-slate-700">{fee.amount}</p>
-                          </div>
-                        ))}
-                        {selectedReservation.taxes.map((tax, idx) => (
-                          <div key={`tax-${idx}`} className="flex justify-between items-center py-2">
-                            <p className="text-slate-600">Tax: {tax.code} ({tax.rate * 100}%)</p>
-                            <p className="font-medium text-slate-700">{tax.amount}</p>
-                          </div>
-                        ))}
-                        {selectedReservation.discounts.map((discount, idx) => (
-                          <div key={`discount-${idx}`} className="flex justify-between items-center py-2 text-emerald-600">
-                            <p>Discount: {discount.code}</p>
-                            <p>-{discount.amount}</p>
-                          </div>
-                        ))}
-                        <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-slate-300">
-                          <p className="font-bold text-lg text-slate-800">Grand Total</p>
-                          <p className="font-bold text-2xl text-blue-600">{selectedReservation.totalAmount}</p>
+                          ))}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Vehicle Details */}
-                  <div className="lg:col-span-2 bg-gradient-to-br from-white to-slate-50/80 rounded-2xl p-6 border border-slate-200/60">
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-11 h-11 rounded-lg bg-gradient-to-r from-slate-500/10 to-slate-600/10 flex items-center justify-center">
-                        <Tag className="w-6 h-6 text-slate-600" />
+                    <div className="bg-gray-50 rounded-xl p-6">
+                      <div className="flex items-center gap-2 mb-4">
+                        <User className="w-5 h-5 text-[#1EA2E4]" />
+                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Customer Information</h4>
                       </div>
-                      <h3 className="text-xl font-bold text-slate-800">Vehicle Specifications</h3>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                      <div>
-                        <p className="text-sm text-slate-500 mb-2">Seats</p>
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-slate-400" />
-                          <p className="font-bold text-slate-800 text-lg">{selectedReservation.seats}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <p className="text-xs text-gray-500">Full Name</p>
+                          <p className="text-lg font-bold text-gray-900">{details.customer}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Email</p>
+                          <div className="flex items-center gap-2">
+                            <Mail className="w-4 h-4 text-gray-400" />
+                            <p className="text-gray-900">{details.email}</p>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Phone</p>
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 text-gray-400" />
+                            <p className="text-gray-900">{details.phone || "N/A"}</p>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Driver License</p>
+                          <p className="text-gray-900">{details.licenseClass} • {details.licenseNumber}</p>
                         </div>
                       </div>
-                      <div>
-                        <p className="text-sm text-slate-500 mb-2">Doors</p>
-                        <p className="font-bold text-slate-800 text-lg">{selectedReservation.doors}</p>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl p-6">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Car className="w-5 h-5 text-[#1EA2E4]" />
+                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Vehicle Information</h4>
                       </div>
-                      <div>
-                        <p className="text-sm text-slate-500 mb-2">GPS Device</p>
-                        <p className="font-bold text-slate-800">{selectedReservation.gpsDeviceId}</p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <p className="text-xs text-gray-500">Make & Model</p>
+                          <p className="text-lg font-bold text-gray-900">{details.vehicleName}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Year</p>
+                          <p className="text-gray-900">{details.year}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Plate Number</p>
+                          <p className="font-mono text-gray-900">{details.plateNumber}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">VIN</p>
+                          <p className="font-mono text-sm text-gray-900">{details.vin}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Color</p>
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: details.color.toLowerCase() }}></div>
+                            <p className="text-gray-900">{details.color}</p>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Odometer</p>
+                          <div className="flex items-center gap-2">
+                            <Gauge className="w-4 h-4 text-gray-400" />
+                            <p className="text-gray-900">{details.odometer} km</p>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Seats</p>
+                          <p className="text-gray-900">{details.seats}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Doors</p>
+                          <p className="text-gray-900">{details.doors}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm text-slate-500 mb-2">Created Channel</p>
-                        <span className="px-2.5 py-1.5 bg-gradient-to-r from-blue-500/10 to-blue-600/10 text-blue-700 font-bold rounded-lg">
-                          {selectedReservation.createdChannel}
-                        </span>
-                      </div>
-                      {selectedReservation.features.length > 0 && (
-                        <div className="col-span-2">
-                          <p className="text-sm text-slate-500 mb-2">Features</p>
+                      {details.features.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <p className="text-xs text-gray-500 mb-2">Features</p>
                           <div className="flex flex-wrap gap-2">
-                            {selectedReservation.features.map((feature, index) => (
-                              <span key={index} className="px-3 py-1.5 bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 font-bold rounded-lg">
+                            {details.features.map((feature, idx) => (
+                              <span key={idx} className="px-2 py-1 bg-white rounded-lg text-xs text-gray-600 border border-gray-200">
                                 {feature}
                               </span>
                             ))}
@@ -1135,73 +1013,453 @@ const stats = {
                         </div>
                       )}
                     </div>
-                    {selectedReservation.vehicleNotes !== 'No notes' && (
-                      <div className="mt-6 bg-white rounded-xl p-4 border border-slate-200/80">
-                        <p className="text-sm text-slate-500 mb-2">Vehicle Notes</p>
-                        <p className="text-slate-800">{selectedReservation.vehicleNotes}</p>
+
+                    <div className="bg-gray-50 rounded-xl p-6">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Calendar className="w-5 h-5 text-[#1EA2E4]" />
+                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Rental Details</h4>
                       </div>
-                    )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-white p-4 rounded-lg border border-gray-200">
+                          <div className="flex items-start gap-3">
+                            <MapPin className="w-5 h-5 text-blue-500 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-semibold text-gray-700">Pick-up Location</p>
+                              <p className="text-gray-900">{details.pickupLocation}</p>
+                              <p className="text-sm text-gray-500 mt-1">{details.startFormatted}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg border border-gray-200">
+                          <div className="flex items-start gap-3">
+                            <MapPin className="w-5 h-5 text-purple-500 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-semibold text-gray-700">Drop-off Location</p>
+                              <p className="text-gray-900">{details.dropoffLocation}</p>
+                              <p className="text-sm text-gray-500 mt-1">{details.endFormatted}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-xl p-6">
+                      <div className="flex items-center gap-2 mb-4">
+                        <CreditCard className="w-5 h-5 text-[#1EA2E4]" />
+                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Payment Summary</h4>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-white p-4 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500">Total Amount</p>
+                          <p className="text-2xl font-bold text-[#1EA2E4]">{details.totalAmount}</p>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500">Paid Amount</p>
+                          <p className="text-2xl font-bold text-emerald-600">{details.paidAmount}</p>
+                        </div>
+                        <div className="bg-white p-4 rounded-lg border border-gray-200">
+                          <p className="text-xs text-gray-500">Outstanding</p>
+                          <p className="text-2xl font-bold text-rose-600">{details.outstandingAmount}</p>
+                        </div>
+                      </div>
+                      {details.pricingBreakdown.length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <p className="text-sm font-medium text-gray-700 mb-3">Pricing Breakdown</p>
+                          <div className="space-y-2">
+                            {details.pricingBreakdown.map((item, idx) => (
+                              <div key={idx} className="flex justify-between text-sm">
+                                <span className="text-gray-600">{item.label} (x{item.quantity})</span>
+                                <span className="font-medium text-gray-900">
+                                  {new Intl.NumberFormat("en-US", {
+                                    style: "currency",
+                                    currency: selectedReservation.pricing?.currency || "USD"
+                                  }).format(parseFloat(item.total.$numberDecimal))}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="border-t border-gray-200 bg-gray-50 px-8 py-5">
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setIsViewModalOpen(false)}
+                  className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Filters Modal */}
+      {showMobileFilters && (
+        <div className="fixed inset-0 z-50 bg-black/50 lg:hidden" onClick={() => setShowMobileFilters(false)}>
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Filter by Status</h3>
+              <button onClick={() => setShowMobileFilters(false)} className="p-2">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {["all", "pending", "confirmed", "active", "completed", "cancelled"].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => {
+                    setSelectedTab(status);
+                    setShowMobileFilters(false);
+                  }}
+                  className={`w-full px-4 py-3 rounded-xl text-left font-medium transition-colors ${
+                    selectedTab === status
+                      ? "bg-[#1EA2E4] text-white"
+                      : "bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snackbar */}
+      {snackbar.show && (
+        <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom duration-300">
+          <div
+            className={`px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px] ${
+              snackbar.type === "success"
+                ? "bg-green-50 border border-green-200 text-green-800"
+                : snackbar.type === "error"
+                ? "bg-red-50 border border-red-200 text-red-800"
+                : "bg-blue-50 border border-blue-200 text-blue-800"
+            }`}
+          >
+            {snackbar.type === "success" && <CheckCircle className="w-5 h-5 flex-shrink-0" />}
+            {snackbar.type === "error" && <AlertCircle className="w-5 h-5 flex-shrink-0" />}
+            <span className="text-sm font-medium flex-1">{snackbar.message}</span>
+            <button onClick={() => setSnackbar((prev) => ({ ...prev, show: false }))} className="text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Reservation Modal */}
+      {isEditModalOpen && selectedReservationForEdit && editFormData && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={() => setIsEditModalOpen(false)} />
+          <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
+            <div className="relative w-screen max-w-4xl">
+              <div className="h-full bg-white shadow-2xl overflow-y-auto">
+                <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-800">Edit Reservation</h2>
+                    <p className="text-sm text-gray-600">Update reservation details</p>
+                  </div>
+                  <button onClick={() => setIsEditModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                    <X className="w-5 h-5 text-gray-600" />
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  {/* Basic Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Basic Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Reservation Code</label>
+                        <input type="text" value={editFormData.code || ""} onChange={(e) => setEditFormData({...editFormData, code: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                        <select value={editFormData.status || "pending"} onChange={(e) => setEditFormData({...editFormData, status: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]">
+                          <option value="pending">Pending</option>
+                          <option value="confirmed">Confirmed</option>
+                          <option value="active">Active</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">User ID</label>
+                        <input type="text" value={editFormData.user_id || ""} onChange={(e) => setEditFormData({...editFormData, user_id: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Created By</label>
+                        <input type="text" value={editFormData.created_by || ""} onChange={(e) => setEditFormData({...editFormData, created_by: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Created Channel</label>
+                        <select value={editFormData.created_channel || "web"} onChange={(e) => setEditFormData({...editFormData, created_channel: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]">
+                          <option value="web">Web</option>
+                          <option value="mobile">Mobile</option>
+                          <option value="admin">Admin</option>
+                          <option value="call_center">Call Center</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Vehicle Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Vehicle Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle ID</label>
+                        <input type="text" value={editFormData.vehicle_id || ""} onChange={(e) => setEditFormData({...editFormData, vehicle_id: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Model ID</label>
+                        <input type="text" value={editFormData.vehicle_model_id || ""} onChange={(e) => setEditFormData({...editFormData, vehicle_model_id: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pickup & Dropoff */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Pickup & Dropoff</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Branch ID</label>
+                        <input type="text" value={editFormData.pickup?.branch_id || ""} onChange={(e) => setEditFormData({...editFormData, pickup: {...editFormData.pickup, branch_id: e.target.value}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Date & Time</label>
+                        <input type="datetime-local" value={editFormData.pickup?.at ? editFormData.pickup.at.slice(0, 16) : ""} onChange={(e) => setEditFormData({...editFormData, pickup: {...editFormData.pickup, at: new Date(e.target.value).toISOString()}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Dropoff Branch ID</label>
+                        <input type="text" value={editFormData.dropoff?.branch_id || ""} onChange={(e) => setEditFormData({...editFormData, dropoff: {...editFormData.dropoff, branch_id: e.target.value}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Dropoff Date & Time</label>
+                        <input type="datetime-local" value={editFormData.dropoff?.at ? editFormData.dropoff.at.slice(0, 16) : ""} onChange={(e) => setEditFormData({...editFormData, dropoff: {...editFormData.dropoff, at: new Date(e.target.value).toISOString()}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Driver Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Driver Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                        <input type="text" value={editFormData.driver_snapshot?.full_name || ""} onChange={(e) => setEditFormData({...editFormData, driver_snapshot: {...editFormData.driver_snapshot, full_name: e.target.value}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                        <input type="text" value={editFormData.driver_snapshot?.phone || ""} onChange={(e) => setEditFormData({...editFormData, driver_snapshot: {...editFormData.driver_snapshot, phone: e.target.value}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                        <input type="email" value={editFormData.driver_snapshot?.email || ""} onChange={(e) => setEditFormData({...editFormData, driver_snapshot: {...editFormData.driver_snapshot, email: e.target.value}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">License Number</label>
+                        <input type="text" value={editFormData.driver_snapshot?.driver_license?.number || ""} onChange={(e) => setEditFormData({...editFormData, driver_snapshot: {...editFormData.driver_snapshot, driver_license: {...editFormData.driver_snapshot?.driver_license, number: e.target.value}}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">License Country</label>
+                        <input type="text" value={editFormData.driver_snapshot?.driver_license?.country || "ZW"} onChange={(e) => setEditFormData({...editFormData, driver_snapshot: {...editFormData.driver_snapshot, driver_license: {...editFormData.driver_snapshot?.driver_license, country: e.target.value}}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">License Class</label>
+                        <input type="text" value={editFormData.driver_snapshot?.driver_license?.class || ""} onChange={(e) => setEditFormData({...editFormData, driver_snapshot: {...editFormData.driver_snapshot, driver_license: {...editFormData.driver_snapshot?.driver_license, class: e.target.value}}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">License Expiry</label>
+                        <input type="datetime-local" value={editFormData.driver_snapshot?.driver_license?.expires_at ? editFormData.driver_snapshot.driver_license.expires_at.slice(0, 16) : ""} onChange={(e) => setEditFormData({...editFormData, driver_snapshot: {...editFormData.driver_snapshot, driver_license: {...editFormData.driver_snapshot?.driver_license, expires_at: new Date(e.target.value).toISOString()}}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">License Verified</label>
+                        <select value={editFormData.driver_snapshot?.driver_license?.verified ? "true" : "false"} onChange={(e) => setEditFormData({...editFormData, driver_snapshot: {...editFormData.driver_snapshot, driver_license: {...editFormData.driver_snapshot?.driver_license, verified: e.target.value === "true"}}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]">
+                          <option value="false">No</option>
+                          <option value="true">Yes</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pricing Section */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Pricing</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                        <input type="text" value={editFormData.pricing?.currency || "USD"} onChange={(e) => setEditFormData({...editFormData, pricing: {...editFormData.pricing, currency: e.target.value}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Grand Total</label>
+                        <input type="text" value={editFormData.pricing?.grand_total || "0"} onChange={(e) => setEditFormData({...editFormData, pricing: {...editFormData.pricing, grand_total: e.target.value}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Computed At</label>
+                        <input type="datetime-local" value={editFormData.pricing?.computed_at ? editFormData.pricing.computed_at.slice(0, 16) : ""} onChange={(e) => setEditFormData({...editFormData, pricing: {...editFormData.pricing, computed_at: new Date(e.target.value).toISOString()}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Fees (JSON)</label>
+                      <textarea value={JSON.stringify(editFormData.pricing?.fees || [], null, 2)} onChange={(e) => { try { const fees = JSON.parse(e.target.value); setEditFormData({...editFormData, pricing: {...editFormData.pricing, fees}}); } catch(err) {} }} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm" placeholder='[{"code": "AIRPORT_FEE", "amount": "10.00"}]' />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Discounts (JSON)</label>
+                      <textarea value={JSON.stringify(editFormData.pricing?.discounts || [], null, 2)} onChange={(e) => { try { const discounts = JSON.parse(e.target.value); setEditFormData({...editFormData, pricing: {...editFormData.pricing, discounts}}); } catch(err) {} }} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm" placeholder='[{"promo_code_id": "promo01", "amount": "5.00"}]' />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Taxes (JSON)</label>
+                      <textarea value={JSON.stringify(editFormData.pricing?.taxes || [], null, 2)} onChange={(e) => { try { const taxes = JSON.parse(e.target.value); setEditFormData({...editFormData, pricing: {...editFormData.pricing, taxes}}); } catch(err) {} }} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm" placeholder='[{"code": "VAT", "rate": 0.15, "amount": "24.00"}]' />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Pricing Breakdown (JSON)</label>
+                      <textarea value={JSON.stringify(editFormData.pricing?.breakdown || [], null, 2)} onChange={(e) => { try { const breakdown = JSON.parse(e.target.value); setEditFormData({...editFormData, pricing: {...editFormData.pricing, breakdown}}); } catch(err) {} }} rows={4} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm" placeholder='[{"label": "Base daily rate", "quantity": 3, "unit_amount": "50.00", "total": "150.00"}]' />
+                    </div>
+                  </div>
+
+                  {/* Payment Summary */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Payment Summary</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
+                        <select value={editFormData.payment_summary?.status || "unpaid"} onChange={(e) => setEditFormData({...editFormData, payment_summary: {...editFormData.payment_summary, status: e.target.value}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]">
+                          <option value="unpaid">Unpaid</option>
+                          <option value="paid">Paid</option>
+                          <option value="partial">Partial</option>
+                          <option value="refunded">Refunded</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Paid Total</label>
+                        <input type="text" value={editFormData.payment_summary?.paid_total || "0"} onChange={(e) => setEditFormData({...editFormData, payment_summary: {...editFormData.payment_summary, paid_total: e.target.value}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Outstanding</label>
+                        <input type="text" value={editFormData.payment_summary?.outstanding || "0"} onChange={(e) => setEditFormData({...editFormData, payment_summary: {...editFormData.payment_summary, outstanding: e.target.value}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Last Payment At</label>
+                        <input type="datetime-local" value={editFormData.payment_summary?.last_payment_at ? editFormData.payment_summary.last_payment_at.slice(0, 16) : ""} onChange={(e) => setEditFormData({...editFormData, payment_summary: {...editFormData.payment_summary, last_payment_at: e.target.value ? new Date(e.target.value).toISOString() : null}})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Notes */}
-                  {selectedReservation.notes !== 'No notes' && (
-                    <div className="lg:col-span-2 bg-gradient-to-br from-white to-slate-50/80 rounded-2xl p-6 border border-slate-200/60">
-                      <div className="flex items-center gap-3 mb-5">
-                        <div className="w-11 h-11 rounded-lg bg-gradient-to-r from-slate-500/10 to-slate-600/10 flex items-center justify-center">
-                          <FileText className="w-6 h-6 text-slate-600" />
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-800">Reservation Notes</h3>
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Additional Notes</h3>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                      <textarea value={editFormData.notes || ""} onChange={(e) => setEditFormData({...editFormData, notes: e.target.value})} rows={4} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" placeholder="Additional notes about this reservation..." />
+                    </div>
+                  </div>
+
+                  {/* Created/Updated Timestamps */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Timestamps</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Created At</label>
+                        <input type="datetime-local" value={editFormData.created_at ? editFormData.created_at.slice(0, 16) : ""} onChange={(e) => setEditFormData({...editFormData, created_at: new Date(e.target.value).toISOString()})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
                       </div>
-                      <div className="bg-white rounded-xl p-5 border border-slate-200/80">
-                        <p className="text-slate-800 leading-relaxed">{selectedReservation.notes}</p>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Updated At</label>
+                        <input type="datetime-local" value={editFormData.updated_at ? editFormData.updated_at.slice(0, 16) : ""} onChange={(e) => setEditFormData({...editFormData, updated_at: new Date(e.target.value).toISOString()})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]" />
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
 
-                <div className="flex justify-end">
-                  <button onClick={() => setSelectedReservation(null)} className="px-6 py-3 bg-gradient-to-r from-slate-100 to-blue-50 hover:from-slate-200 hover:to-blue-100 text-slate-700 font-bold rounded-xl">
-                    Close Details
-                  </button>
+                <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
+                  <div className="flex justify-end gap-3">
+                    <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">Cancel</button>
+                    <button onClick={handleUpdateReservation} disabled={isUpdatingReservation} className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 flex items-center gap-2">
+                      {isUpdatingReservation ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Updating...</> : "Save Changes"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Mobile Filters Modal */}
-        {showMobileFilters && (
-          <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={() => setShowMobileFilters(false)}>
-            <div className="absolute right-0 top-0 h-full w-64 bg-white p-4" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold">Filter</h3>
-                <button onClick={() => setShowMobileFilters(false)} className="p-2">
-                  <X className="w-5 h-5" />
+      {/* Status Update Modal */}
+      {showStatusModal && selectedStatusReservation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={() => !isUpdatingStatus && setShowStatusModal(false)} />
+          <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mr-4">
+                  <Clock className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Update Reservation Status</h3>
+                  <p className="text-sm text-gray-600">Reservation: {selectedStatusReservation.code}</p>
+                </div>
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select New Status</label>
+                <select value={selectedNewStatus} onChange={(e) => setSelectedNewStatus(e.target.value)} disabled={isUpdatingStatus} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent disabled:opacity-50">
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="active">Active</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setShowStatusModal(false)} disabled={isUpdatingStatus} className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50">Cancel</button>
+                <button onClick={handleConfirmStatusUpdate} disabled={isUpdatingStatus || selectedNewStatus === selectedStatusReservation.status} className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  {isUpdatingStatus ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Updating...</> : "Update Status"}
                 </button>
               </div>
-              <div className="space-y-2">
-                {['all', 'pending', 'confirmed', 'active', 'completed', 'cancelled'].map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => {
-                      setSelectedTab(tab);
-                      setShowMobileFilters(false);
-                    }}
-                    className={`w-full px-4 py-3 rounded-lg font-semibold text-left ${
-                      selectedTab === tab ? 'bg-blue-600 text-white' : 'bg-gray-100'
-                    }`}
-                  >
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                  </button>
-                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {reservationToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={() => !isDeleting && setReservationToDelete(null)} />
+          <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mr-4">
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Delete Reservation</h3>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+              <p className="text-gray-600 mb-6">Are you sure you want to delete this reservation? This will permanently remove all reservation data and cannot be recovered.</p>
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setReservationToDelete(null)} disabled={isDeleting} className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
+                <button onClick={() => handleDeleteReservation(reservationToDelete)} disabled={isDeleting} className="px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  {isDeleting ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Deleting...</> : "Delete Reservation"}
+                </button>
               </div>
             </div>
           </div>
-        )}
-
-      </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default ManagerReservations;
+export default ReservationsPage;

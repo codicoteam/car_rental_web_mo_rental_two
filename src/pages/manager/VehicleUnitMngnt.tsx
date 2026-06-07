@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-
-
 import { 
     fetchVehicleUnits,
     createVehicleUnit,
@@ -14,7 +12,9 @@ import {
     type UpdateVehiclePayload,
     type VehicleStatus,
     type AvailabilityState,
-
+      updateVehicleAvailability,
+       recordVehicleService, 
+       type RecordServicePayload
  } from "../../Services/adminAndManager/vehicle_units_services";
  import { fetchVehicleModels } from "../../Services/adminAndManager/vehicle_model_service";
  import { fetchBranches } from "../../Services/adminAndManager/admin_branch_service";
@@ -31,6 +31,7 @@ import {
     MoreVertical,
     Car,
     Fuel,
+    Activity,
     Cog,
     Users,
     DoorOpen,
@@ -226,6 +227,22 @@ const VehicleUnitMngmnt: React.FC = () => {
         maxOdometer: "",
     });
     const [showFilters, setShowFilters] = useState(false);
+    const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
+const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+const [selectedUnitForAction, setSelectedUnitForAction] = useState<IVehicleUnit | null>(null);
+const [availabilityForm, setAvailabilityForm] = useState<{
+  availability_state: AvailabilityState;
+}>({
+  availability_state: "available"
+});
+const [serviceForm, setServiceForm] = useState<{
+  date: string;
+  odometer_km: number;
+}>({
+  date: new Date().toISOString(),
+  odometer_km: 0
+});
+const [serviceActionLoading, setServiceActionLoading] = useState(false);
 
     // Snackbar
     const [snackbar, setSnackbar] = useState<{
@@ -546,6 +563,69 @@ const VehicleUnitMngmnt: React.FC = () => {
             showSnackbar(errorDisplay.message, "error");
         }
     };
+
+    const handleOpenAvailabilityModal = (unit: IVehicleUnit) => {
+  setSelectedUnitForAction(unit);
+  setAvailabilityForm({
+    availability_state: unit.availability_state || "available"
+  });
+  setIsAvailabilityModalOpen(true);
+};
+
+const handleOpenServiceModal = (unit: IVehicleUnit) => {
+  setSelectedUnitForAction(unit);
+  setServiceForm({
+    date: new Date().toISOString(),
+    odometer_km: unit.odometer_km || 0
+  });
+  setIsServiceModalOpen(true);
+};
+
+const handleUpdateAvailability = async () => {
+  if (!selectedUnitForAction) return;
+  
+  try {
+    setServiceActionLoading(true);
+    await updateVehicleAvailability(selectedUnitForAction._id, {
+      availability_state: availabilityForm.availability_state
+    });
+    
+    showSnackbar(`Vehicle availability updated to ${availabilityForm.availability_state}`, "success");
+    setIsAvailabilityModalOpen(false);
+    loadData();
+  } catch (err) {
+    const errorDisplay = getErrorDisplay(err);
+    showSnackbar(errorDisplay.message, "error");
+  } finally {
+    setServiceActionLoading(false);
+  }
+};
+
+const handleRecordService = async () => {
+  if (!selectedUnitForAction) return;
+  
+  if (serviceForm.odometer_km < (selectedUnitForAction.odometer_km || 0)) {
+    showSnackbar("Service odometer reading cannot be less than current odometer", "error");
+    return;
+  }
+  
+  try {
+    setServiceActionLoading(true);
+    await recordVehicleService(selectedUnitForAction._id, {
+      date: serviceForm.date,
+      odometer_km: serviceForm.odometer_km
+    });
+    
+    showSnackbar("Service record added successfully", "success");
+    setIsServiceModalOpen(false);
+    loadData();
+  } catch (err) {
+    const errorDisplay = getErrorDisplay(err);
+    showSnackbar(errorDisplay.message, "error");
+  } finally {
+    setServiceActionLoading(false);
+  }
+};
 
     // Reset create form
     const resetCreateForm = () => {
@@ -1115,6 +1195,21 @@ const VehicleUnitMngmnt: React.FC = () => {
                                                 >
                                                     <Eye className="w-4 h-4" />
                                                 </button>
+                                                <button
+                                                    onClick={() => handleOpenAvailabilityModal(unit)}
+                                                    className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    title="Update Availability"
+                                                    >
+                                                    <Activity className="w-4 h-4" />
+                                                    </button>
+
+                                                    <button
+                                                    onClick={() => handleOpenServiceModal(unit)}
+                                                    className="p-1.5 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                                    title="Record Service"
+                                                    >
+                                                    <Wrench className="w-4 h-4" />
+                                                    </button>
                                                 <button
                                                     onClick={() => {
                                                         setSelectedUnit(unit);
@@ -2425,6 +2520,94 @@ const VehicleUnitMngmnt: React.FC = () => {
                     </div>
                 </div>
             )}
+            {/* Update Availability Modal */}
+{isAvailabilityModalOpen && selectedUnitForAction && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsAvailabilityModalOpen(false)} />
+    <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full">
+      <div className="p-6">
+        <div className="flex items-center mb-4">
+          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mr-4">
+            <Activity className="w-6 h-6 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Update Availability</h3>
+            <p className="text-sm text-gray-600">{selectedUnitForAction.plate_number}</p>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Availability State</label>
+          <select
+            value={availabilityForm.availability_state}
+            onChange={(e) => setAvailabilityForm({ availability_state: e.target.value as AvailabilityState })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+          >
+            {AVAILABILITY_OPTIONS.map(option => (
+              <option key={option} value={option}>{option.replace('_', ' ').toUpperCase()}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-6">
+          <button onClick={() => setIsAvailabilityModalOpen(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+          <button onClick={handleUpdateAvailability} disabled={serviceActionLoading} className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] disabled:opacity-50">
+            {serviceActionLoading ? 'Updating...' : 'Update'}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* Record Service Modal */}
+{isServiceModalOpen && selectedUnitForAction && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsServiceModalOpen(false)} />
+    <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full">
+      <div className="p-6">
+        <div className="flex items-center mb-4">
+          <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center mr-4">
+            <Wrench className="w-6 h-6 text-purple-600" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Record Service</h3>
+            <p className="text-sm text-gray-600">{selectedUnitForAction.plate_number}</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Service Date</label>
+            <input
+              type="datetime-local"
+              value={serviceForm.date.slice(0, 16)}
+              onChange={(e) => setServiceForm({ ...serviceForm, date: new Date(e.target.value).toISOString() })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Odometer (km)</label>
+            <input
+              type="number"
+              value={serviceForm.odometer_km}
+              onChange={(e) => setServiceForm({ ...serviceForm, odometer_km: parseInt(e.target.value) || 0 })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
+            />
+            <p className="text-xs text-gray-500 mt-1">Current: {formatOdometer(selectedUnitForAction.odometer_km)}</p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-6">
+          <button onClick={() => setIsServiceModalOpen(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+          <button onClick={handleRecordService} disabled={serviceActionLoading} className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] disabled:opacity-50">
+            {serviceActionLoading ? 'Recording...' : 'Record Service'}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
             {/* Delete Confirmation Modal */}
             {unitToDelete && (

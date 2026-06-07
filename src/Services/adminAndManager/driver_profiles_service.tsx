@@ -1,5 +1,47 @@
 import axios from "axios";
 
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = "https://hfbudnmvjbzvpefvtiuu.supabase.co";
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYnVkbm12amJ6dnBlZnZ0aXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczOTE2NTgsImV4cCI6MjA2Mjk2NzY1OH0.ionCach1O5vekQDoP7Bx6pSVaLXduJN9kYbWwlaRzKk";
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Sanitize filename helper
+const sanitizeFilename = (filename: string): string => {
+  return filename.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+};
+
+// File upload function
+export const uploadFileToSupabase = async (file: File, bucket: string = "topics", setProgress?: (progress: number) => void): Promise<string> => {
+  const sanitizedFileName = sanitizeFilename(file.name);
+  const fileName = `${Date.now()}_${sanitizedFileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(bucket)
+    .upload(fileName, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type,
+    });
+
+  if (uploadError) {
+    console.error("Supabase upload error:", uploadError);
+    throw new Error(`File upload failed: ${uploadError.message}`);
+  }
+
+  // Get public URL
+  const { data: publicUrlData } = supabase.storage
+    .from(bucket)
+    .getPublicUrl(fileName);
+
+  if (!publicUrlData?.publicUrl) {
+    throw new Error("Failed to get file URL after upload");
+  }
+
+  return publicUrlData.publicUrl;
+};
+
 
 
 const BASE_URL = "http://13.61.185.238:5050/api/v1/driver-profiles";
@@ -29,6 +71,7 @@ export interface User {
   full_name: string;
   status: string;
 }
+
 
 // Identity document interface
 export interface IdentityDocument {
@@ -80,6 +123,19 @@ export interface DriverProfile {
   __v: number;
 }
 
+export interface CreateDriverProfilePayload {
+  display_name: string;
+  base_city: string;
+  base_region: string;
+  base_country: string;
+  hourly_rate: number;
+  bio: string;
+  years_experience: number;
+  languages: string[];
+  identity_document: IdentityDocument;
+  driver_license: DriverLicense;
+}
+
 export interface UpdateDriverPayload {
   display_name: string;
   base_city: string;
@@ -105,6 +161,21 @@ export interface UpdateDriverPayload {
   };
 }
 
+export interface UpdateDriverProfilePayload {
+  display_name?: string;
+  base_city?: string;
+  base_region?: string;
+  base_country?: string;
+  hourly_rate?: number;
+  bio?: string;
+  years_experience?: number;
+  languages?: string[];
+  identity_document?: IdentityDocument;
+  driver_license?: DriverLicense;
+  profile_image?: string;
+  is_available?: boolean;
+}
+
 // API Response wrapper
 export interface DriverProfilesResponse {
   success: boolean;
@@ -121,6 +192,42 @@ export interface DriverProfileResponse {
  * Service for handling driver profile-related API requests
  */
 const DriverProfileService = {
+
+   getMyDriverProfile: async (): Promise<DriverProfileResponse> => {
+    try {
+      const token = getAuthToken();
+      const response = await axios.get<DriverProfileResponse>(`${BASE_URL}/me`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        // If 404, it means profile doesn't exist yet
+        if (error.response?.status === 404) {
+          throw { notFound: true, message: "Driver profile not found" };
+        }
+        throw error.response?.data || "Failed to fetch driver profile";
+      } else {
+        throw "An unexpected error occurred";
+      }
+    }
+  },
+   
+   createDriverProfile: async (data: CreateDriverProfilePayload): Promise<DriverProfileResponse> => {
+    try {
+      const token = getAuthToken();
+      const response = await axios.post<DriverProfileResponse>(`${BASE_URL}/me`, data, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        throw error.response?.data || "Failed to create driver profile";
+      } else {
+        throw "An unexpected error occurred";
+      }
+    }
+  },
   /**
    * Get all driver profiles (GET)
    * GET /api/v1/drivers
@@ -165,21 +272,26 @@ const DriverProfileService = {
  * Update a driver profile (PATCH)
  * PATCH /api/v1/driver-profiles/{id}
  */
-updateDriverProfile: async (driverId: string, updateData: Partial<DriverProfile>): Promise<DriverProfileResponse> => {
-  try {
-    const token = getAuthToken();
-    const response = await axios.patch<DriverProfileResponse>(`${BASE_URL}/${driverId}`, updateData, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    return response.data;
-  } catch (error: unknown) {
-    if (axios.isAxiosError(error)) {
-      throw error.response?.data || "Failed to update driver profile";
-    } else {
-      throw "An unexpected error occurred";
+  /**
+   * Update driver profile (PATCH)
+   * PATCH /api/v1/driver-profiles/me
+   */
+  updateDriverProfile: async (data: UpdateDriverProfilePayload): Promise<DriverProfileResponse> => {
+    try {
+      const token = getAuthToken();
+      const response = await axios.patch<DriverProfileResponse>(`${BASE_URL}/me`, data, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        throw error.response?.data || "Failed to update driver profile";
+      } else {
+        throw "An unexpected error occurred";
+      }
     }
-  }
-},
+  },
+
 
   /**
  * Delete a driver profile (DELETE)

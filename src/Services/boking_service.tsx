@@ -125,6 +125,96 @@ const BookingDriverService = {
     }
   },
 
+  getDriverBookings: async (): Promise<any> => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.get(`${BASE_URL}/driver`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    return response.data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      throw error.response?.data || "Failed to retrieve driver bookings";
+    } else {
+      throw "An unexpected error occurred";
+    }
+  }
+},
+
+// Add to your BookingDriverService object
+
+/**
+ * Driver responds to a booking (accept/decline)
+ * PATCH /api/v1/driver-bookings/driver/{id}/respond
+ */
+respondToBooking: async (id: string, action: 'accept' | 'decline'): Promise<any> => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.patch(
+      `${BASE_URL}/driver/${id}/respond`,
+      { action },
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+    return response.data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      throw error.response?.data || "Failed to respond to booking";
+    } else {
+      throw "An unexpected error occurred";
+    }
+  }
+},
+
+/**
+ * Driver cancels a booking
+ * PATCH /api/v1/driver-bookings/driver/{id}/cancel
+ */
+cancelBooking: async (id: string): Promise<any> => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.patch(
+      `${BASE_URL}/driver/${id}/cancel`,
+      {},
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+    return response.data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      throw error.response?.data || "Failed to cancel booking";
+    } else {
+      throw "An unexpected error occurred";
+    }
+  }
+},
+
+/**
+ * Driver completes a booking
+ * PATCH /api/v1/driver-bookings/driver/{id}/complete
+ */
+completeBooking: async (id: string): Promise<any> => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.patch(
+      `${BASE_URL}/driver/${id}/complete`,
+      {},
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+    return response.data;
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      throw error.response?.data || "Failed to complete booking";
+    } else {
+      throw "An unexpected error occurred";
+    }
+  }
+},
+
   getAllBookings: async (): Promise<any> => {
   try {
     const token = getAuthToken();

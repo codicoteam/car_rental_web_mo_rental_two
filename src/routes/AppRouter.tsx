@@ -60,6 +60,11 @@ import VehicleTrackersScreen from "../pages/admin/vehicle_trackers/VehicleTracke
 import AdminReports from "../pages/admin/reports/AdminReports";
 import NotificationScreen from "../pages/customer/notification";
 import AdminNotificationsScreen from "../pages/admin/notifications/NotificationsScreen";
+import DriverDashboard from "../pages/driver/DriverDashboard";
+import MyBookings from "../pages/driver/driver-bookings/MyBookings";
+import DriverProfileScreen from "../pages/driver/driver-profile/DriverProfile";
+
+// driver routes
 
 function App() {
   return (
@@ -130,6 +135,13 @@ function App() {
              <Route path="/manager-vehicle-incidents" element={<VehicleIncidents />}/>
             <Route path="/manager-driver-bookings" element={<ManagerDriverBookings />}/>
             <Route path="/manager-driver-profiles" element={<DriverProfilesPage />}/>
+
+            //driver routes
+             <Route path="/driver-dashboard" element={<DriverDashboard/>} />
+             <Route path="/driver/bookings" element={<MyBookings/>} />
+             <Route path="/driver/profile" element={<DriverProfileScreen/>} />
+             
+
            
 
 

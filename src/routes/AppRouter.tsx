@@ -71,7 +71,7 @@ function App() {
     <ThemeProvider>
       <Router>
         <Routes>
-        //Admin routes
+          {/* Admin routes */}
           <Route path="/" element={<Welcome />} />
           <Route path="/roles" element={<RoleSelection/>} />
           <Route path="/signup" element={<SignupScreen/>} />
@@ -95,51 +95,46 @@ function App() {
           <Route path="/admin-driver-profiles" element={<AdminDriverProfiles />} />
           <Route path="/admin-driver-bookings" element={<DriverBookingScreen />}/>
           <Route path="/admin-payments" element={<PaymentsScreen />}/>
-          <Route path="/admin-vehicle-trackers" element= {<VehicleTrackersScreen />}/>
+          <Route path="/admin-vehicle-trackers" element={<VehicleTrackersScreen />}/>
           <Route path="/admin-notifications" element={<AdminNotificationsScreen />}/>
-          <Route path="admin-reports" element={<AdminReports />}/>
-          // customer Routes
+          <Route path="/admin-reports" element={<AdminReports />}/>
+          {/* Customer routes */}
           <Route path="/dashboardy" element={<Dashboardy/>} />
           <Route path="/vehicle" element={<Vihicles/>} />
           <Route path="/reservations" element={<Reservation/>} />
           <Route path="/orders" element={<Service/>} />
           <Route path="/profile" element={<Profile/>} />
           <Route path="/driver" element={<Drivers/>} />
-         
-          {/* <Route path="/book/:id" element={<BookingPage/>} /> */}
           <Route path="/book/:id" element={<CreateReservation/>} />
-           <Route path="/chart" element={<ChatScreen/>} />
-           <Route path="/notification" element={<NotificationScreen/>} />
-
-           //Agent Routes
-            <Route path="/agentdashboard" element={<AgentDashboard/>} />
-            <Route path="/agentbook/:id" element={<AgentbookingPage/>} />
-            <Route path="/user" element={<UsersListScreen/>} />
-            <Route path="/agent" element={<AgentVehicles/>} />
-            <Route path="/agentdriver" element={<Agentdrivers/>} />
-            <Route path="/agentreservations" element={<AgentReservation/>} />
-            <Route path="/agentchart" element={<AgentChatScreen/>} />
-            <Route path="/agentprofile" element={<AgentProfile/>} />
-             <Route path="/agentnotification" element={<AgentNotification/>} />
-
-             // Manager routes
-             <Route path="/branch-manager-dashboard" element={<ManagerDashboard />} />
-             <Route path="/manager-vehicle-models" element={<VehicleModels />}/>
-             <Route path="/manager-vehicles" element={<VehicleUnitMngmnt />}/>
-             <Route path="/manager-reservations" element={<ManagerReservations />}/>
-            <Route path="/manager-users" element={<ManagerUsersPage />} />
-            <Route path="/manager-service-orders" element= {<ManagerServiceOrder/>} />
-            <Route path="/manager-service-schedules" element={<ManagerServiceSchedules />}/>
-            <Route path="/manager-rate-plans" element={<RatePlans />}/>
-            <Route path="/manager-promo-codes" element={<PromoCodesPage />}/>
-             <Route path="/manager-vehicle-incidents" element={<VehicleIncidents />}/>
-            <Route path="/manager-driver-bookings" element={<ManagerDriverBookings />}/>
-            <Route path="/manager-driver-profiles" element={<DriverProfilesPage />}/>
-
-            //driver routes
-             <Route path="/driver-dashboard" element={<DriverDashboard/>} />
-             <Route path="/driver/bookings" element={<MyBookings/>} />
-             <Route path="/driver/profile" element={<DriverProfileScreen/>} />
+          <Route path="/chart" element={<ChatScreen/>} />
+          <Route path="/notification" element={<NotificationScreen/>} />
+          {/* Agent routes */}
+          <Route path="/agentdashboard" element={<AgentDashboard/>} />
+          <Route path="/agentbook/:id" element={<AgentbookingPage/>} />
+          <Route path="/user" element={<UsersListScreen/>} />
+          <Route path="/agent" element={<AgentVehicles/>} />
+          <Route path="/agentdriver" element={<Agentdrivers/>} />
+          <Route path="/agentreservations" element={<AgentReservation/>} />
+          <Route path="/agentchart" element={<AgentChatScreen/>} />
+          <Route path="/agentprofile" element={<AgentProfile/>} />
+          <Route path="/agentnotification" element={<AgentNotification/>} />
+          {/* Manager routes */}
+          <Route path="/branch-manager-dashboard" element={<ManagerDashboard />} />
+          <Route path="/manager-vehicle-models" element={<VehicleModels />}/>
+          <Route path="/manager-vehicles" element={<VehicleUnitMngmnt />}/>
+          <Route path="/manager-reservations" element={<ManagerReservations />}/>
+          <Route path="/manager-users" element={<ManagerUsersPage />} />
+          <Route path="/manager-service-orders" element={<ManagerServiceOrder/>} />
+          <Route path="/manager-service-schedules" element={<ManagerServiceSchedules />}/>
+          <Route path="/manager-rate-plans" element={<RatePlans />}/>
+          <Route path="/manager-promo-codes" element={<PromoCodesPage />}/>
+          <Route path="/manager-vehicle-incidents" element={<VehicleIncidents />}/>
+          <Route path="/manager-driver-bookings" element={<ManagerDriverBookings />}/>
+          <Route path="/manager-driver-profiles" element={<DriverProfilesPage />}/>
+          {/* Driver routes */}
+          <Route path="/driver-dashboard" element={<DriverDashboard/>} />
+          <Route path="/driver/bookings" element={<MyBookings/>} />
+          <Route path="/driver/profile" element={<DriverProfileScreen/>} />
              
 
            

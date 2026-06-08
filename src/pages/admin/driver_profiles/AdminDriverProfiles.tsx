@@ -314,7 +314,7 @@ const handleDelete = async () => {
             },
         };
         
-        const response = await DriverProfileService.updateDriverProfile(selectedDriver._id, updatePayload);
+        const response = await DriverProfileService.updateDriverProfileById(selectedDriver._id, updatePayload);
         
         if (response.success) {
             showSnackbar("Driver profile updated successfully", "success");

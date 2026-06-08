@@ -273,6 +273,26 @@ const DriverProfileService = {
  * PATCH /api/v1/driver-profiles/{id}
  */
   /**
+   * Update a driver profile by ID (admin)
+   * PATCH /api/v1/driver-profiles/{id}
+   */
+  updateDriverProfileById: async (id: string, data: UpdateDriverProfilePayload): Promise<DriverProfileResponse> => {
+    try {
+      const token = getAuthToken();
+      const response = await axios.patch<DriverProfileResponse>(`${BASE_URL}/${id}`, data, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return response.data;
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        throw error.response?.data || "Failed to update driver profile";
+      } else {
+        throw "An unexpected error occurred";
+      }
+    }
+  },
+
+  /**
    * Update driver profile (PATCH)
    * PATCH /api/v1/driver-profiles/me
    */

@@ -99,9 +99,10 @@ const Welcome = () => {
               }`}
             >
               <img
-                src="https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=1920&h=1080&fit=crop"
+                src="https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=1280&h=720&fit=crop&q=75"
                 alt="Luxury Car"
                 className="w-full h-full object-cover"
+                loading="eager"
               />
             </div>
             <div
@@ -127,9 +128,10 @@ const Welcome = () => {
               }`}
             >
               <img
-                src="https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=1920&h=1080&fit=crop"
+                src="https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=1280&h=720&fit=crop&q=75"
                 alt="Modern Car"
                 className="w-full h-full object-cover"
+                loading="lazy"
               />
             </div>
             <div
@@ -155,9 +157,10 @@ const Welcome = () => {
               }`}
             >
               <img
-                src="https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=1920&h=1080&fit=crop"
+                src="https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=1280&h=720&fit=crop&q=75"
                 alt="Electric Car"
                 className="w-full h-full object-cover"
+                loading="lazy"
               />
             </div>
             <div

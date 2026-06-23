@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { ThemeProvider } from "../components/ThemeProvider";
 import Welcome from "../pages/public/WelcomePage";
+import LandingPage from "../pages/public/LandingPage";
 import Dashboard from "../pages/admin/AdminDashboardPage";
 import Bookings from "../pages/admin/BookingsPage";
 import Customers from "../pages/admin/CustomersPage";
@@ -114,7 +115,8 @@ function App() {
       <Router>
         <Routes>
           {/* Admin routes */}
-          <Route path="/" element={<Welcome />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/welcome" element={<Welcome />} />
           <Route path="/roles" element={<RoleSelection/>} />
           <Route path="/signup" element={<SignupScreen/>} />
           <Route path="/login" element={<SignInScreen/>} />

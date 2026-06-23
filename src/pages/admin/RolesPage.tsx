@@ -57,7 +57,16 @@ export default function RoleSelection() {
       color: 'from-red-500 via-rose-600 to-pink-600',
       shadowColor: 'shadow-red-500/50',
       badge: 'On Road',
-    }
+    },
+    {
+      id: 'receptionist',
+      title: 'Receptionist',
+      icon: Shield,
+      description: 'Front desk & daily operations',
+      color: 'from-teal-500 via-cyan-600 to-sky-600',
+      shadowColor: 'shadow-teal-500/50',
+      badge: 'Front Desk',
+    },
   ];
 
   const handleContinue = () => {

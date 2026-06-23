@@ -79,16 +79,27 @@ export default function SignInScreen() {
 
      
     if (role === 'manager' || role === 'branch-manager') {
-      getAndStoreManagerBranch(user._id).then(() => {
+      // Store branch_id from login response if available, otherwise query by manager
+      if ((user as any).branch_id) {
+        localStorage.setItem('manager_branch_id', (user as any).branch_id);
         window.location.href = '/branch-manager-dashboard';
-      });
+      } else {
+        getAndStoreManagerBranch(user._id).then(() => {
+          window.location.href = '/branch-manager-dashboard';
+        });
+      }
+    } else if (role === 'receptionist' || role === 'branch_receptionist') {
+      // Receptionists get branch_id directly from login response (enriched by backend)
+      if ((user as any).branch_id) {
+        localStorage.setItem('manager_branch_id', (user as any).branch_id);
+      }
+      window.location.href = '/receptionist-dashboard';
     } else {
 
       switch (role) {
         case 'admin':
           window.location.href = '/admin-dashboard';
           break;
-       
         case 'agent':
           window.location.href = '/agentdashboard';
           break;

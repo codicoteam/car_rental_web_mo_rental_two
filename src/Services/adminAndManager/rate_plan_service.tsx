@@ -347,6 +347,84 @@ export async function deleteRatePlan(
   }
 }
 
+function pickBestPlan(plans: IRatePlan[]): IRatePlan | null {
+  if (!Array.isArray(plans) || plans.length === 0) return null;
+  return plans.find(p => p.active) ?? plans[0];
+}
+
+/** PUT /rate-plans/upsert — replaces the existing plan for the vehicle_id/vehicle_model_id scope, or creates if none exists */
+export async function upsertRatePlan(
+  payload: CreateRatePlanPayload
+): Promise<IRatePlan> {
+  try {
+    const res = await axios.put(`${API_BASE}/rate-plans/upsert`, payload, {
+      headers: {
+        ...authHeaders(),
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+    });
+    return res.data?.data || res.data;
+  } catch (err) {
+    throw toApiError(err, "Failed to upsert rate plan");
+  }
+}
+
+/** GET /rate-plans/by-vehicle/:vehicleId — most-specific override. Returns array; picks first active. */
+export async function fetchRatePlanByVehicle(vehicleId: string): Promise<IRatePlan | null> {
+  try {
+    const res = await axios.get(`${API_BASE}/rate-plans/by-vehicle/${vehicleId}`, {
+      headers: { ...authHeaders(), Accept: "application/json" },
+    });
+    const plans: IRatePlan[] = res.data?.data ?? [];
+    return pickBestPlan(plans);
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+    throw toApiError(err, "Failed to fetch rate plan by vehicle");
+  }
+}
+
+/** GET /rate-plans/by-vehicle/:vehicleId — returns ALL plans for the unit (for listing). */
+export async function fetchAllRatePlansByVehicle(vehicleId: string): Promise<IRatePlan[]> {
+  try {
+    const res = await axios.get(`${API_BASE}/rate-plans/by-vehicle/${vehicleId}`, {
+      headers: { ...authHeaders(), Accept: "application/json" },
+    });
+    return res.data?.data ?? [];
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) return [];
+    throw toApiError(err, "Failed to fetch rate plans by vehicle");
+  }
+}
+
+/** GET /rate-plans/by-model/:vehicleModelId */
+export async function fetchRatePlanByModel(vehicleModelId: string): Promise<IRatePlan | null> {
+  try {
+    const res = await axios.get(`${API_BASE}/rate-plans/by-model/${vehicleModelId}`, {
+      headers: { ...authHeaders(), Accept: "application/json" },
+    });
+    const plans: IRatePlan[] = res.data?.data ?? [];
+    return pickBestPlan(plans);
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+    throw toApiError(err, "Failed to fetch rate plan by model");
+  }
+}
+
+/** GET /rate-plans/by-class/:vehicleClass */
+export async function fetchRatePlanByClass(vehicleClass: string): Promise<IRatePlan | null> {
+  try {
+    const res = await axios.get(`${API_BASE}/rate-plans/by-class/${vehicleClass}`, {
+      headers: { ...authHeaders(), Accept: "application/json" },
+    });
+    const plans: IRatePlan[] = res.data?.data ?? [];
+    return pickBestPlan(plans);
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) return null;
+    throw toApiError(err, "Failed to fetch rate plan by class");
+  }
+}
+
 /** Helper for error display (same as user_service) */
 export function getErrorDisplay(err: unknown): {
   message: string;

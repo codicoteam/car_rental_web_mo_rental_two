@@ -209,24 +209,43 @@ export default function SignupScreen() {
         /** Navigate to correct dashboard (priority: selectedRole → user.roles[0]) */
         const role = (selectedRole || result.user.roles?.[0] || "customer").toLowerCase();
 
-        switch (role) {
-          case "admin":
-            navigate("/admin-dashboard");
-            break;
-          case "manager":
-          case "branch-manager": // keep supporting this alias if used elsewhere
-            navigate("/branch-manager-dashboard");
-            break;
-          case "agent":
-            navigate("/agentdashboard");
-            break;
-          case "driver":
-            navigate("/driver-dashboard");
-            break;
-          case "customer":
-          default:
-            navigate("/dashboardy");
-            break;
+        const dashboardRoute = (() => {
+          switch (role) {
+            case "admin": return "/admin-dashboard";
+            case "manager":
+            case "branch-manager": return "/branch-manager-dashboard";
+            case "agent": return "/agentdashboard";
+            case "driver": return "/driver-dashboard";
+            default: return "/dashboardy";
+          }
+        })();
+
+        // For new customers, offer to complete profile now
+        if (role === "customer" || role === "") {
+          const wantsProfile = await Swal.fire({
+            title: "One more step!",
+            html: `
+              <div class="text-center">
+                <div class="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg class="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                  </svg>
+                </div>
+                <p class="text-gray-700 mb-1">Welcome, <strong>${result.user.full_name}</strong>!</p>
+                <p class="text-gray-500 text-sm">Complete your profile so our team can verify your identity and approve your account faster.</p>
+              </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: "Complete Profile Now",
+            cancelButtonText: "Do it Later",
+            confirmButtonColor: "#2563eb",
+            cancelButtonColor: "#6b7280",
+            customClass: { popup: "rounded-2xl" },
+          });
+          navigate(wantsProfile.isConfirmed ? "/customer-profile" : dashboardRoute);
+        } else {
+          navigate(dashboardRoute);
         }
       } catch (error: any) {
         Swal.close();

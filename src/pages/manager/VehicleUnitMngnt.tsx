@@ -60,15 +60,11 @@ import {
     Database,
     Car as CarIcon,
     Building,
+    DollarSign,
+    Lock,
 } from "lucide-react";
 
-// Supabase Client
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = "https://hfbudnmvjbzvpefvtiuu.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYnVkbm12amJ6dnBlZnZ0aXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczOTE2NTgsImV4cCI6MjA2Mjk2NzY1OH0.ionCach1O5vekQDoP7Bx6pSVaLXduJN9kYbWwlaRzKk";
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from "../../helpers/supa_base_client";
 
 // Sanitize filename helper
 const sanitizeFilename = (filename: string): string => {
@@ -199,6 +195,11 @@ const VehicleUnitMngmnt: React.FC = () => {
             doors: 4,
             features: [],
         },
+        accounting: {
+            purchase_price: null,
+            purchased_at: null,
+            currency: "USD",
+        },
     });
 
     const [editForm, setEditForm] = useState<UpdateVehiclePayload>({});
@@ -215,6 +216,9 @@ const VehicleUnitMngmnt: React.FC = () => {
     const [editNewPhotoFiles, setEditNewPhotoFiles] = useState<File[]>([]);
     const [editNewPhotoPreviews, setEditNewPhotoPreviews] = useState<string[]>([]);
     const editFileInputRef = useRef<HTMLInputElement>(null);
+
+    // Manager's own branch ID (derived on init, used for all data reloads)
+    const [managerBranchId, setManagerBranchId] = useState<string | undefined>();
 
     // Search and filter states
     const [searchQuery, setSearchQuery] = useState("");
@@ -269,54 +273,25 @@ const [serviceActionLoading, setServiceActionLoading] = useState(false);
             }
         };
 
-    // Load vehicle units
-    const loadData = useCallback(async () => {
-    try {
-        setLoading(true);
-        setError(null);
+    // Load vehicle units — optionally scoped to a branch
+    const loadData = useCallback(async (branchId?: string) => {
+        try {
+            setLoading(true);
+            setError(null);
 
-        // Get current user from localStorage using the correct key
-        const authData = localStorage.getItem('car_rental_auth');
-        console.log('Auth data from localStorage:', authData);
-        
-        if (!authData) {
-            console.log('No auth data found');
-            setVehicleUnits([]);
+            const response: IVehiclesResponse = await fetchVehicleUnits(1, 100,
+                branchId ? { branch_id: branchId } : undefined
+            );
+            setVehicleUnits(response.data.items || []);
+        } catch (err) {
+            const errorDisplay = getErrorDisplay(err);
+            console.error('Error loading vehicles:', err);
+            setError(errorDisplay.message || "Failed to load vehicle units");
+            showSnackbar(errorDisplay.message, "error");
+        } finally {
             setLoading(false);
-            return;
         }
-        
-        const auth = JSON.parse(authData);
-        const currentUserId = auth.user._id;
-        console.log('Current User ID:', currentUserId);
-
-        // Fetch all vehicle units
-        const response: IVehiclesResponse = await fetchVehicleUnits(1, 100);
-        const allUnits = response.data.items || [];
-        console.log('Total vehicles:', allUnits.length);
-
-        // Filter vehicles by branch manager ID
-        const filteredUnits = allUnits.filter(unit => {
-            if (unit.branch_id && typeof unit.branch_id === 'object') {
-                const branchManagerId = (unit.branch_id as any).branchManager;
-                console.log(`Vehicle ${unit.plate_number} - Branch Manager: ${branchManagerId}, Current User: ${currentUserId}, Match: ${branchManagerId === currentUserId}`);
-                return branchManagerId === currentUserId;
-            }
-            return false;
-        });
-
-        console.log('Filtered vehicles count:', filteredUnits.length);
-        setVehicleUnits(filteredUnits);
-        
-    } catch (err) {
-        const errorDisplay = getErrorDisplay(err);
-        console.error('Error loading vehicles:', err);
-        setError(errorDisplay.message || "Failed to load vehicle units");
-        showSnackbar(errorDisplay.message, "error");
-    } finally {
-        setLoading(false);
-    }
-}, []);
+    }, []);
 
     // Load vehicle models
     const loadVehicleModels = async () => {
@@ -354,13 +329,41 @@ const [serviceActionLoading, setServiceActionLoading] = useState(false);
     // }, []);
 
     useEffect(() => {
-    const initialize = async () => {
-        await loadBranches();
-        await loadData();
-        await loadVehicleModels();
-    };
-    initialize();
-}, []);
+        const initialize = async () => {
+            let managedBranchId: string | undefined;
+            try {
+                const branchesRes = await fetchBranches();
+                const allBranches = branchesRes.data || [];
+                setBranches(allBranches as any);
+
+                const authData = localStorage.getItem('car_rental_auth');
+                if (authData) {
+                    const auth = JSON.parse(authData);
+                    const currentUserId: string = auth?.user?._id ?? '';
+                    const userRoles: string[] = auth?.user?.roles ?? [];
+
+                    // Admins see all vehicles — skip branch scoping
+                    if (!userRoles.includes('admin') && !userRoles.includes('executive_admin')) {
+                        const managed = allBranches.find(b => {
+                            const mgr = (b as any).branchManager;
+                            const mgrId = mgr && typeof mgr === 'object' ? mgr._id : mgr;
+                            return mgrId?.toString() === currentUserId;
+                        });
+                        managedBranchId = managed?._id;
+                    }
+                    setManagerBranchId(managedBranchId);
+                }
+            } catch (e) {
+                console.error('Failed to load branches:', e);
+            }
+
+            await Promise.all([
+                loadData(managedBranchId),
+                loadVehicleModels(),
+            ]);
+        };
+        initialize();
+    }, [loadData]);
 
     // Snackbar helper
     const showSnackbar = (message: string, type: "success" | "error" | "info") => {
@@ -511,7 +514,7 @@ const [serviceActionLoading, setServiceActionLoading] = useState(false);
             resetCreateForm();
             setPhotoFiles([]);
             setPhotoPreviews([]);
-            loadData();
+            loadData(managerBranchId);
         } catch (err) {
             const errorDisplay = getErrorDisplay(err);
             showSnackbar(errorDisplay.message, "error");
@@ -544,7 +547,7 @@ const [serviceActionLoading, setServiceActionLoading] = useState(false);
             showSnackbar("Vehicle unit updated successfully", "success");
             setIsEditModalOpen(false);
             resetEditForm();
-            loadData();
+            loadData(managerBranchId);
         } catch (err) {
             const errorDisplay = getErrorDisplay(err);
             showSnackbar(errorDisplay.message, "error");
@@ -557,7 +560,7 @@ const [serviceActionLoading, setServiceActionLoading] = useState(false);
             await deleteVehicleUnit(unitId);
             showSnackbar("Vehicle unit deleted successfully", "success");
             setUnitToDelete(null);
-            loadData();
+            loadData(managerBranchId);
         } catch (err) {
             const errorDisplay = getErrorDisplay(err);
             showSnackbar(errorDisplay.message, "error");
@@ -592,7 +595,7 @@ const handleUpdateAvailability = async () => {
     
     showSnackbar(`Vehicle availability updated to ${availabilityForm.availability_state}`, "success");
     setIsAvailabilityModalOpen(false);
-    loadData();
+    loadData(managerBranchId);
   } catch (err) {
     const errorDisplay = getErrorDisplay(err);
     showSnackbar(errorDisplay.message, "error");
@@ -618,7 +621,7 @@ const handleRecordService = async () => {
     
     showSnackbar("Service record added successfully", "success");
     setIsServiceModalOpen(false);
-    loadData();
+    loadData(managerBranchId);
   } catch (err) {
     const errorDisplay = getErrorDisplay(err);
     showSnackbar(errorDisplay.message, "error");
@@ -682,6 +685,7 @@ const handleRecordService = async () => {
                 status: selectedUnit.status,
                 availability_state: selectedUnit.availability_state,
                 metadata: selectedUnit.metadata,
+                accounting: selectedUnit.accounting ?? { purchase_price: null, purchased_at: null, currency: "USD" },
             });
             // Set existing photos
             setEditExistingPhotos(selectedUnit.photos || []);
@@ -956,9 +960,8 @@ const handleRecordService = async () => {
                             {/* Refresh */}
                             <button
                                 onClick={() => {
-                                    loadData();
+                                    loadData(managerBranchId);
                                     loadVehicleModels();
-                                    loadBranches();
                                 }}
                                 className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                                 title="Refresh"
@@ -1975,6 +1978,73 @@ const handleRecordService = async () => {
                                             </div>
                                         )}
                                     </div>
+
+                                    {/* Financial Information (Internal — staff only) */}
+                                    <div className="space-y-4 pt-6 border-t border-gray-200">
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <DollarSign className="w-5 h-5 text-amber-600" />
+                                                <h3 className="text-lg font-semibold text-gray-800">Financial Information</h3>
+                                            </div>
+                                            <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium rounded-full">
+                                                <Lock className="w-3 h-3" />
+                                                Internal — not visible to customers
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-gray-500">
+                                            Used for bookkeeping, asset tracking, and depreciation calculations. This data is only accessible to authorised staff.
+                                        </p>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-amber-50/50 border border-amber-100 rounded-xl p-4">
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Purchase Price</label>
+                                                <div className="relative">
+                                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={createForm.accounting?.purchase_price ?? ""}
+                                                        onChange={(e) => setCreateForm(prev => ({
+                                                            ...prev,
+                                                            accounting: { ...prev.accounting, purchase_price: e.target.value === "" ? null : parseFloat(e.target.value) },
+                                                        }))}
+                                                        className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                        placeholder="e.g. 25000.00"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                                                <select
+                                                    value={createForm.accounting?.currency ?? "USD"}
+                                                    onChange={(e) => setCreateForm(prev => ({ ...prev, accounting: { ...prev.accounting, currency: e.target.value } }))}
+                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                >
+                                                    <option value="USD">USD — US Dollar</option>
+                                                    <option value="ZWL">ZWL — Zimbabwe Dollar</option>
+                                                    <option value="ZAR">ZAR — South African Rand</option>
+                                                    <option value="GBP">GBP — British Pound</option>
+                                                    <option value="EUR">EUR — Euro</option>
+                                                </select>
+                                            </div>
+                                            <div className="md:col-span-3">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Purchase Date</label>
+                                                <div className="relative">
+                                                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                    <input
+                                                        type="date"
+                                                        value={createForm.accounting?.purchased_at ? new Date(createForm.accounting.purchased_at).toISOString().split("T")[0] : ""}
+                                                        onChange={(e) => setCreateForm(prev => ({
+                                                            ...prev,
+                                                            accounting: { ...prev.accounting, purchased_at: e.target.value || null },
+                                                        }))}
+                                                        className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
@@ -2438,6 +2508,73 @@ const handleRecordService = async () => {
                                                 </div>
                                             </div>
                                         )}
+                                    </div>
+
+                                    {/* Financial Information (Internal — staff only) */}
+                                    <div className="space-y-4 pt-6 border-t border-gray-200">
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <DollarSign className="w-5 h-5 text-amber-600" />
+                                                <h3 className="text-lg font-semibold text-gray-800">Financial Information</h3>
+                                            </div>
+                                            <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium rounded-full">
+                                                <Lock className="w-3 h-3" />
+                                                Internal — not visible to customers
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-gray-500">
+                                            Used for bookkeeping, asset tracking, and depreciation calculations. This data is only accessible to authorised staff.
+                                        </p>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-amber-50/50 border border-amber-100 rounded-xl p-4">
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Purchase Price</label>
+                                                <div className="relative">
+                                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={editForm.accounting?.purchase_price ?? ""}
+                                                        onChange={(e) => setEditForm(prev => ({
+                                                            ...prev,
+                                                            accounting: { ...prev.accounting, purchase_price: e.target.value === "" ? null : parseFloat(e.target.value) },
+                                                        }))}
+                                                        className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                        placeholder="e.g. 25000.00"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
+                                                <select
+                                                    value={editForm.accounting?.currency ?? "USD"}
+                                                    onChange={(e) => setEditForm(prev => ({ ...prev, accounting: { ...prev.accounting, currency: e.target.value } }))}
+                                                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                >
+                                                    <option value="USD">USD — US Dollar</option>
+                                                    <option value="ZWL">ZWL — Zimbabwe Dollar</option>
+                                                    <option value="ZAR">ZAR — South African Rand</option>
+                                                    <option value="GBP">GBP — British Pound</option>
+                                                    <option value="EUR">EUR — Euro</option>
+                                                </select>
+                                            </div>
+                                            <div className="md:col-span-3">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Purchase Date</label>
+                                                <div className="relative">
+                                                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                    <input
+                                                        type="date"
+                                                        value={editForm.accounting?.purchased_at ? new Date(editForm.accounting.purchased_at).toISOString().split("T")[0] : ""}
+                                                        onChange={(e) => setEditForm(prev => ({
+                                                            ...prev,
+                                                            accounting: { ...prev.accounting, purchased_at: e.target.value || null },
+                                                        }))}
+                                                        className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 

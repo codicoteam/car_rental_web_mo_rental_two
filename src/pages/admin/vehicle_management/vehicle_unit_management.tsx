@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
     fetchVehicleUnits,
     createVehicleUnit,
@@ -60,15 +60,11 @@ import {
     Database,
     Car as CarIcon,
     Building,
+    DollarSign,
+    Lock,
 } from "lucide-react";
 
-// Supabase Client
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = "https://hfbudnmvjbzvpefvtiuu.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYnVkbm12amJ6dnBlZnZ0aXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczOTE2NTgsImV4cCI6MjA2Mjk2NzY1OH0.ionCach1O5vekQDoP7Bx6pSVaLXduJN9kYbWwlaRzKk";
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from "../../../helpers/supa_base_client";
 
 // Sanitize filename helper
 const sanitizeFilename = (filename: string): string => {
@@ -159,6 +155,7 @@ interface BranchOption {
 
 const VehicleUnitManagement: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
 
     // State
     const [vehicleUnits, setVehicleUnits] = useState<IVehicleUnit[]>([]);
@@ -198,6 +195,11 @@ const VehicleUnitManagement: React.FC = () => {
             seats: 5,
             doors: 4,
             features: [],
+        },
+        accounting: {
+            purchase_price: null,
+            purchased_at: null,
+            currency: "USD",
         },
     });
 
@@ -306,6 +308,19 @@ const [serviceActionLoading, setServiceActionLoading] = useState(false);
         loadVehicleModels();
         loadBranches();
     }, []);
+
+    // Auto-open view modal when navigated from reservation detail
+    useEffect(() => {
+        const targetId = (location.state as any)?.vehicleId;
+        if (!targetId || vehicleUnits.length === 0) return;
+        const unit = vehicleUnits.find(u => u._id === targetId);
+        if (unit) {
+            setSelectedUnit(unit);
+            setIsViewModalOpen(true);
+            // Clear state so refresh doesn't re-open
+            window.history.replaceState({}, "");
+        }
+    }, [vehicleUnits, location.state]);
 
     // Snackbar helper
     const showSnackbar = (message: string, type: "success" | "error" | "info") => {
@@ -627,6 +642,7 @@ const handleRecordService = async () => {
                 status: selectedUnit.status,
                 availability_state: selectedUnit.availability_state,
                 metadata: selectedUnit.metadata,
+                accounting: selectedUnit.accounting ?? { purchase_price: null, purchased_at: null, currency: "USD" },
             });
             // Set existing photos
             setEditExistingPhotos(selectedUnit.photos || []);
@@ -1509,6 +1525,47 @@ const handleRecordService = async () => {
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* Financial Information */}
+                                    {selectedUnit.accounting && (
+                                        <div className="bg-amber-50 border border-amber-100 rounded-lg p-4 md:col-span-2">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <h4 className="text-sm font-semibold text-amber-800 uppercase tracking-wider">Financial Information</h4>
+                                                <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 border border-amber-200 text-amber-700 text-xs font-medium rounded-full">
+                                                    <Lock className="w-3 h-3" />
+                                                    Staff Only
+                                                </span>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div>
+                                                    <p className="text-xs text-amber-700 font-medium">Purchase Price</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <DollarSign className="w-4 h-4 text-amber-500" />
+                                                        <p className="text-gray-900 font-semibold text-lg">
+                                                            {selectedUnit.accounting.purchase_price != null
+                                                                ? selectedUnit.accounting.purchase_price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                                                : "—"}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-amber-700 font-medium">Currency</p>
+                                                    <p className="text-gray-900 font-medium mt-1">{selectedUnit.accounting.currency ?? "—"}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-amber-700 font-medium">Purchase Date</p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <Calendar className="w-4 h-4 text-amber-500" />
+                                                        <p className="text-gray-900 font-medium">
+                                                            {selectedUnit.accounting.purchased_at
+                                                                ? new Date(selectedUnit.accounting.purchased_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+                                                                : "—"}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -1922,6 +1979,92 @@ const handleRecordService = async () => {
                                             </div>
                                         </div>
                                     )}
+                                </div>
+
+                                {/* Financial Information (Internal — staff only) */}
+                                <div className="space-y-4 pt-6 border-t border-gray-200">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <DollarSign className="w-5 h-5 text-amber-600" />
+                                            <h3 className="text-lg font-semibold text-gray-800">Financial Information</h3>
+                                        </div>
+                                        <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium rounded-full">
+                                            <Lock className="w-3 h-3" />
+                                            Internal — not visible to customers
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-500">
+                                        Used for bookkeeping, asset tracking, and depreciation calculations. This data is only accessible to authorised staff.
+                                    </p>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-amber-50/50 border border-amber-100 rounded-xl p-4">
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Purchase Price
+                                            </label>
+                                            <div className="relative">
+                                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={createForm.accounting?.purchase_price ?? ""}
+                                                    onChange={(e) => setCreateForm(prev => ({
+                                                        ...prev,
+                                                        accounting: {
+                                                            ...prev.accounting,
+                                                            purchase_price: e.target.value === "" ? null : parseFloat(e.target.value),
+                                                        },
+                                                    }))}
+                                                    className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                    placeholder="e.g. 25000.00"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Currency
+                                            </label>
+                                            <select
+                                                value={createForm.accounting?.currency ?? "USD"}
+                                                onChange={(e) => setCreateForm(prev => ({
+                                                    ...prev,
+                                                    accounting: { ...prev.accounting, currency: e.target.value },
+                                                }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                            >
+                                                <option value="USD">USD — US Dollar</option>
+                                                <option value="ZWL">ZWL — Zimbabwe Dollar</option>
+                                                <option value="ZAR">ZAR — South African Rand</option>
+                                                <option value="GBP">GBP — British Pound</option>
+                                                <option value="EUR">EUR — Euro</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="md:col-span-3">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Purchase Date
+                                            </label>
+                                            <div className="relative">
+                                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                <input
+                                                    type="date"
+                                                    value={createForm.accounting?.purchased_at
+                                                        ? new Date(createForm.accounting.purchased_at).toISOString().split("T")[0]
+                                                        : ""}
+                                                    onChange={(e) => setCreateForm(prev => ({
+                                                        ...prev,
+                                                        accounting: {
+                                                            ...prev.accounting,
+                                                            purchased_at: e.target.value || null,
+                                                        },
+                                                    }))}
+                                                    className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -2386,6 +2529,92 @@ const handleRecordService = async () => {
                                             </div>
                                         </div>
                                     )}
+                                </div>
+
+                                {/* Financial Information (Internal — staff only) */}
+                                <div className="space-y-4 pt-6 border-t border-gray-200">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <DollarSign className="w-5 h-5 text-amber-600" />
+                                            <h3 className="text-lg font-semibold text-gray-800">Financial Information</h3>
+                                        </div>
+                                        <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium rounded-full">
+                                            <Lock className="w-3 h-3" />
+                                            Internal — not visible to customers
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-gray-500">
+                                        Used for bookkeeping, asset tracking, and depreciation calculations. This data is only accessible to authorised staff.
+                                    </p>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-amber-50/50 border border-amber-100 rounded-xl p-4">
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Purchase Price
+                                            </label>
+                                            <div className="relative">
+                                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={editForm.accounting?.purchase_price ?? ""}
+                                                    onChange={(e) => setEditForm(prev => ({
+                                                        ...prev,
+                                                        accounting: {
+                                                            ...prev.accounting,
+                                                            purchase_price: e.target.value === "" ? null : parseFloat(e.target.value),
+                                                        },
+                                                    }))}
+                                                    className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                    placeholder="e.g. 25000.00"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Currency
+                                            </label>
+                                            <select
+                                                value={editForm.accounting?.currency ?? "USD"}
+                                                onChange={(e) => setEditForm(prev => ({
+                                                    ...prev,
+                                                    accounting: { ...prev.accounting, currency: e.target.value },
+                                                }))}
+                                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                            >
+                                                <option value="USD">USD — US Dollar</option>
+                                                <option value="ZWL">ZWL — Zimbabwe Dollar</option>
+                                                <option value="ZAR">ZAR — South African Rand</option>
+                                                <option value="GBP">GBP — British Pound</option>
+                                                <option value="EUR">EUR — Euro</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="md:col-span-3">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Purchase Date
+                                            </label>
+                                            <div className="relative">
+                                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                <input
+                                                    type="date"
+                                                    value={editForm.accounting?.purchased_at
+                                                        ? new Date(editForm.accounting.purchased_at).toISOString().split("T")[0]
+                                                        : ""}
+                                                    onChange={(e) => setEditForm(prev => ({
+                                                        ...prev,
+                                                        accounting: {
+                                                            ...prev.accounting,
+                                                            purchased_at: e.target.value || null,
+                                                        },
+                                                    }))}
+                                                    className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

@@ -1,979 +1,609 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Car,
-  Users,
-  DollarSign,
-  Menu,
-  ChevronDown,
-  TrendingUp,
-  Activity,
-  Key,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  RefreshCw,
-  Calendar,
-} from "lucide-react";
+  Menu, RefreshCw, Building2, Car, Users, DollarSign, AlertTriangle,
+  Wrench, TrendingUp, TrendingDown, Minus, Calendar, CreditCard,
+  UserCheck, MapPin, BarChart3, Bell, Tag, ShieldCheck,
+  Activity, ChevronRight, AlertCircle, Lock,
+} from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import Sidebar from '../../components/Sidebar';
+import { useAppSelector } from '../../app/hooks';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
-import Sidebar from "../../components/Sidebar";
-import DashboardService, { type DashboardData } from "../../Services/adminAndManager/admin_dashboard_service";
+  fetchAdminDashboardData, getErrorDisplay,
+  type IAdminDashboardData, type BranchMapItem,
+} from '../../Services/adminAndManager/admin_dashboard_service';
+import {
+  ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend,
+  AreaChart, Area, CartesianGrid, XAxis, YAxis, BarChart, Bar,
+  LineChart, Line,
+} from 'recharts';
 
-const Dashboard = () => {
-  const [isDarkMode] = useState(false);
+// Fix leaflet default marker icons (bundler strips the default path)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+const branchMapIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+// ── palette ────────────────────────────────────────────────────────────────────
+const BRAND_NAVY  = '#0A1628';
+const BRAND_BLUE  = '#1EA2E4';
+const CHART_COLORS = ['#1EA2E4','#22C55E','#F59E0B','#A855F7','#EF4444','#14B8A6','#F97316','#64748B'];
+
+// ── helpers ────────────────────────────────────────────────────────────────────
+
+/** Safely coerce any value (including Decimal128 objects) to a number or null. */
+function safeNum(val: unknown): number | null {
+  if (val == null) return null;
+  if (typeof val === 'number') return isNaN(val) ? null : val;
+  if (typeof val === 'object' && '$numberDecimal' in (val as object)) {
+    const n = parseFloat((val as Record<string, string>)['$numberDecimal']);
+    return isNaN(n) ? null : n;
+  }
+  const n = parseFloat(String(val));
+  return isNaN(n) ? null : n;
+}
+
+const fmt = (val: unknown) => {
+  const n = safeNum(val);
+  return n != null ? n.toLocaleString() : '—';
+};
+
+const fmtCurrency = (val: unknown) => {
+  const n = safeNum(val);
+  return n != null
+    ? `$${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+    : '$0';
+};
+
+const fmtDate = (d: Date) => d.toISOString().split('T')[0];
+
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+// ── shimmer skeleton ───────────────────────────────────────────────────────────
+const Shimmer = ({ className = '' }: { className?: string }) => (
+  <div className={`relative overflow-hidden rounded-xl bg-slate-100 ${className}`}>
+    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.4s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+  </div>
+);
+
+const LoadingSkeleton = () => (
+  <div className="flex min-h-screen bg-slate-50">
+    <div className="hidden lg:block"><Sidebar /></div>
+    <div className="flex-1 p-6 space-y-5">
+      <Shimmer className="h-10 w-72" />
+      <Shimmer className="h-28 w-full rounded-2xl" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[...Array(8)].map((_, i) => <Shimmer key={i} className="h-28" />)}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+        {[...Array(12)].map((_, i) => <Shimmer key={i} className="h-16" />)}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {[...Array(4)].map((_, i) => <Shimmer key={i} className="h-72" />)}
+      </div>
+    </div>
+    <style>{`@keyframes shimmer{100%{transform:translateX(100%)}}`}</style>
+  </div>
+);
+
+// ── KPI card ───────────────────────────────────────────────────────────────────
+interface KpiCardProps {
+  title: string; value: string | number; sub: string;
+  icon: React.ElementType; accent: string; bg: string; trend?: number | null;
+}
+const KpiCard = ({ title, value, sub, icon: Icon, accent, bg, trend }: KpiCardProps) => (
+  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 p-5 flex flex-col gap-3">
+    <div className="flex items-center justify-between">
+      <div className={`${bg} p-2.5 rounded-xl`}>
+        <Icon className={`w-5 h-5 ${accent}`} />
+      </div>
+      {trend != null && (
+        <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${trend >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+          {trend > 0 ? <TrendingUp className="w-3 h-3" /> : trend < 0 ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+          {trend !== 0 ? `${Math.abs(trend)}%` : 'Flat'}
+        </span>
+      )}
+    </div>
+    <div>
+      <p className="text-2xl font-bold text-slate-900 leading-none tracking-tight">{value}</p>
+      <p className="text-sm font-medium text-slate-500 mt-1.5">{title}</p>
+      <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
+    </div>
+  </div>
+);
+
+// ── quick-action nav card ──────────────────────────────────────────────────────
+interface QuickNavItem { label: string; sub: string; icon: React.ElementType; path: string; color: string; bg: string; }
+const QuickCard = ({ item, onClick }: { item: QuickNavItem; onClick: () => void }) => (
+  <button onClick={onClick}
+    className="group bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-[#1EA2E4]/40 transition-all duration-200 p-4 flex items-center gap-3 text-left w-full">
+    <div className={`${item.bg} p-2.5 rounded-xl group-hover:scale-105 transition-transform duration-150 flex-shrink-0`}>
+      <item.icon className={`w-4 h-4 ${item.color}`} />
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-sm font-semibold text-slate-800 truncate">{item.label}</p>
+      <p className="text-xs text-slate-400 truncate">{item.sub}</p>
+    </div>
+    <ChevronRight className="w-4 h-4 text-slate-200 group-hover:text-[#1EA2E4] group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+  </button>
+);
+
+// ── chart card wrapper ─────────────────────────────────────────────────────────
+const ChartCard = ({ title, sub, icon: Icon, children }: { title: string; sub: string; icon: React.ElementType; children: React.ReactNode }) => (
+  <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+    <div className="flex items-start justify-between mb-5">
+      <div>
+        <h3 className="text-[15px] font-semibold text-slate-800">{title}</h3>
+        <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
+      </div>
+      <div className="bg-slate-50 p-2 rounded-lg"><Icon className="w-4 h-4 text-slate-400" /></div>
+    </div>
+    {children}
+  </div>
+);
+
+const ttStyle = {
+  backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
+  padding: '10px 14px', fontSize: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.07)',
+};
+
+// ── main ───────────────────────────────────────────────────────────────────────
+const ADMIN_ROLES = ['admin', 'executive_admin'];
+
+export default function AdminDashboardPage() {
+  const navigate = useNavigate();
+  const authUser = useAppSelector((state) => state.auth.user);
+  const hasAccess = authUser?.roles?.some(r => ADMIN_ROLES.includes(r)) ?? false;
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [animatedValues, setAnimatedValues] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
-  const [currentSlide, setCurrentSlide] = useState(0);
-  
-  // State for dashboard data
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState({ from: "", to: "" });
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  
-  // Refs for date picker
-  const datePickerRef = useRef<HTMLDivElement>(null);
-  const dateButtonRef = useRef<HTMLButtonElement>(null);
+  const [isLoading, setIsLoading]     = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+  const [data, setData]               = useState<IAdminDashboardData | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // Mock user data - replace with actual user context
-  const firstName = "John Doe";
+  const [dateRange, setDateRange] = useState({
+    from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    to: new Date(),
+  });
 
-  // Hero slides data
-  const heroSlides = [
-    {
-      title: "Fleet Management",
-      subtitle: "Made Simple",
-      description: "Monitor your entire vehicle fleet in real-time with powerful analytics",
-      image: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=1920&h=1080&fit=crop",
-    },
-    {
-      title: "Track Rentals",
-      subtitle: "Effortlessly",
-      description: "Manage bookings, availability, and customer requests from one dashboard",
-      image: "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=1920&h=1080&fit=crop",
-    },
-    {
-      title: "Maximize Revenue",
-      subtitle: "Intelligently",
-      description: "Data-driven insights to optimize pricing and boost your profits",
-      image: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=1920&h=1080&fit=crop",
-    },
-  ];
-
-  // Featured cars data
-  const featuredCars = [
-    {
-      id: 1,
-      name: "Tesla Model 3",
-      type: "Electric",
-      price: "$120/day",
-      image: "https://images.unsplash.com/photo-1560958089-b8a63c50ce20?w=400&h=300&fit=crop",
-      badge: "Popular",
-      badgeColor: "bg-blue-500",
-    },
-    {
-      id: 2,
-      name: "BMW X5",
-      type: "SUV",
-      price: "$180/day",
-      image: "https://images.unsplash.com/photo-1519641471654-76ce0107ad1b?w=400&h=300&fit=crop",
-      badge: "Luxury",
-      badgeColor: "bg-purple-500",
-    },
-    {
-      id: 3,
-      name: "Mercedes C-Class",
-      type: "Sedan",
-      price: "$150/day",
-      image: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=400&h=300&fit=crop",
-      badge: "Premium",
-      badgeColor: "bg-amber-500",
-    },
-    {
-      id: 4,
-      name: "Audi A4",
-      type: "Sedan",
-      price: "$140/day",
-      image: "https://images.unsplash.com/photo-1606611012088-0e0e71be0fbf?w=400&h=300&fit=crop",
-      badge: "Eco",
-      badgeColor: "bg-green-500",
-    },
-  ];
-
-  // Close date picker when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        showDatePicker &&
-        datePickerRef.current &&
-        !datePickerRef.current.contains(event.target as Node) &&
-        dateButtonRef.current &&
-        !dateButtonRef.current.contains(event.target as Node)
-      ) {
-        setShowDatePicker(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showDatePicker]);
-
-  // Fetch dashboard data
-  const fetchDashboardData = async (from?: string, to?: string) => {
-    setLoading(true);
+  const load = useCallback(async () => {
     setError(null);
-    
     try {
-      let data;
-      if (from && to) {
-        data = await DashboardService.getDashboardData(from, to);
-      } else {
-        data = await DashboardService.getLastNDaysData(30);
-      }
-      
-      setDashboardData(data);
-      
-      if (data.data.range) {
-        setDateRange({
-          from: new Date(data.data.range.from).toLocaleDateString(),
-          to: new Date(data.data.range.to).toLocaleDateString(),
-        });
-      }
-    } catch (err) {
-      console.error("Failed to fetch dashboard data:", err);
-      setError(err instanceof Error ? err.message : "Failed to load dashboard data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle date range change
-  const handleDateRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setDateRange(prev => ({ ...prev, [name]: value }));
-  };
-
-  const applyDateRange = () => {
-    if (dateRange.from && dateRange.to) {
-      const fromDate = new Date(dateRange.from);
-      const toDate = new Date(dateRange.to);
-      fetchDashboardData(fromDate.toISOString(), toDate.toISOString());
-      setShowDatePicker(false);
-    }
-  };
-
-  // Initial data load
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  // Animation effect for counters
-  useEffect(() => {
-    if (!dashboardData) return;
-    
-    const metrics = [
-      dashboardData.data.kpis.total_vehicles,
-      dashboardData.data.kpis.active_fleet,
-      dashboardData.data.kpis.reservations_in_range,
-      dashboardData.data.kpis.active_reservations_now,
-      dashboardData.data.kpis.total_branches,
-      dashboardData.data.kpis.open_or_review_incidents,
-      dashboardData.data.kpis.open_or_in_progress_services,
-    ];
-    
-    const timer = setTimeout(() => {
-      metrics.forEach((targetValue, index) => {
-        let currentValue = 0;
-        const increment = targetValue / 50;
-        
-        const counter = setInterval(() => {
-          currentValue += increment;
-          if (currentValue >= targetValue) {
-            currentValue = targetValue;
-            clearInterval(counter);
-          }
-          
-          setAnimatedValues((prev) => {
-            const newValues = [...prev];
-            newValues[index] = Math.floor(currentValue);
-            return newValues;
-          });
-        }, 30);
+      const result = await fetchAdminDashboardData({
+        from: fmtDate(dateRange.from),
+        to: fmtDate(dateRange.to),
       });
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, [dashboardData]);
+      setData(result);
+      setLastUpdated(new Date());
+    } catch (err) {
+      setError(getErrorDisplay(err).message);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [dateRange.from, dateRange.to]);
 
-  // Auto-rotate hero slides
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % heroSlides.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [heroSlides.length]);
+  useEffect(() => { setIsLoading(true); load(); }, [load]);
+  const refresh = () => { setIsRefreshing(true); load(); };
 
-  // Theme classes
-  const themeClasses = {
-    bg: isDarkMode
-      ? "bg-gray-900"
-      : "bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100",
-    card: isDarkMode ? "bg-gray-800/70" : "bg-white/70",
-    text: isDarkMode ? "text-white" : "text-slate-800",
-    textSecondary: isDarkMode ? "text-gray-400" : "text-slate-600",
-    border: isDarkMode ? "border-gray-700" : "border-white/50",
-    header: isDarkMode ? "bg-gray-800/80" : "bg-white/80",
-  };
+  // derived chart data
+  const revenuePerDay       = useMemo(() => (data?.charts.lines.revenue_per_day ?? []).map(x => ({ date: shortDate(x.date), value: x.value })), [data]);
+  const reservationsPerDay  = useMemo(() => (data?.charts.lines.reservations_per_day ?? []).map(x => ({ date: shortDate(x.date), value: x.value })), [data]);
+  const reservationsByStatus= useMemo(() => (data?.charts.pie.reservations_by_status ?? []).map(x => ({ name: x.label.replace(/_/g,' '), value: x.value })), [data]);
+  const revenueByBranch     = useMemo(() => (data?.charts.bars.revenue_by_branch ?? []).map(x => ({ name: x.label, value: x.value })), [data]);
+  const vehiclesByClass     = useMemo(() => (data?.charts.bars.vehicles_by_class ?? []).map(x => ({ name: x.label, value: x.value })), [data]);
 
-  // Prepare metrics from API data
-  const metrics = dashboardData ? [
-    {
-      label: "Total Vehicles",
-      value: dashboardData.data.kpis.total_vehicles,
-      unit: "",
-      trend: "+5%",
-      color: "from-blue-500 to-blue-600",
-      bgColor: isDarkMode
-        ? "bg-blue-900/20"
-        : "bg-gradient-to-br from-blue-500/10 to-cyan-500/5",
-      borderColor: isDarkMode ? "border-blue-700/50" : "border-blue-200/50",
-      icon: Car,
-    },
-    {
-      label: "Active Fleet",
-      value: dashboardData.data.kpis.active_fleet,
-      unit: "",
-      trend: "+12%",
-      color: "from-emerald-500 to-emerald-600",
-      bgColor: isDarkMode
-        ? "bg-emerald-900/20"
-        : "bg-gradient-to-br from-emerald-500/10 to-teal-500/5",
-      borderColor: isDarkMode ? "border-emerald-700/50" : "border-emerald-200/50",
-      icon: Key,
-    },
-    {
-      label: "Reservations (Range)",
-      value: dashboardData.data.kpis.reservations_in_range,
-      unit: "",
-      trend: "+8%",
-      color: "from-purple-500 to-purple-600",
-      bgColor: isDarkMode
-        ? "bg-purple-900/20"
-        : "bg-gradient-to-br from-purple-500/10 to-pink-500/5",
-      borderColor: isDarkMode ? "border-purple-700/50" : "border-purple-200/50",
-      icon: Users,
-    },
-    {
-      label: "Active Reservations",
-      value: dashboardData.data.kpis.active_reservations_now,
-      unit: "",
-      trend: "+15%",
-      color: "from-orange-500 to-orange-600",
-      bgColor: isDarkMode
-        ? "bg-orange-900/20"
-        : "bg-gradient-to-br from-orange-500/10 to-yellow-500/5",
-      borderColor: isDarkMode ? "border-orange-700/50" : "border-orange-200/50",
-      icon: DollarSign,
-    },
-    {
-      label: "Total Branches",
-      value: dashboardData.data.kpis.total_branches,
-      unit: "",
-      trend: "0%",
-      color: "from-cyan-500 to-cyan-600",
-      bgColor: isDarkMode
-        ? "bg-cyan-900/20"
-        : "bg-gradient-to-br from-cyan-500/10 to-blue-500/5",
-      borderColor: isDarkMode ? "border-cyan-700/50" : "border-cyan-200/50",
-      icon: Car,
-    },
-    {
-      label: "Open Incidents",
-      value: dashboardData.data.kpis.open_or_review_incidents,
-      unit: "",
-      trend: "-2%",
-      color: "from-red-500 to-red-600",
-      bgColor: isDarkMode
-        ? "bg-red-900/20"
-        : "bg-gradient-to-br from-red-500/10 to-rose-500/5",
-      borderColor: isDarkMode ? "border-red-700/50" : "border-red-200/50",
-      icon: AlertCircle,
-    },
-    {
-      label: "Services In Progress",
-      value: dashboardData.data.kpis.open_or_in_progress_services,
-      unit: "",
-      trend: "+3%",
-      color: "from-yellow-500 to-yellow-600",
-      bgColor: isDarkMode
-        ? "bg-yellow-900/20"
-        : "bg-gradient-to-br from-yellow-500/10 to-amber-500/5",
-      borderColor: isDarkMode ? "border-yellow-700/50" : "border-yellow-200/50",
-      icon: Activity,
-    },
-  ] : [];
-
-  // Prepare chart data
-  const vehicleTypeData = dashboardData?.data.charts.bars.vehicles_by_class.map(item => ({
-    name: item.label,
-    value: item.value,
-    fill: getColorForLabel(item.label),
-  })) || [];
-
-  const rentalStatusData = dashboardData?.data.charts.pie.reservations_by_status.map(item => ({
-    status: item.label,
-    count: item.value,
-    fill: getStatusColor(item.label),
-  })) || [];
-
-  const reservationsPerDayData = dashboardData?.data.charts.lines.reservations_per_day.map(item => ({
-    date: item.date,
-    reservations: item.value,
-  })) || [];
-
-  const revenueData = dashboardData?.data.charts.lines.revenue_per_day.map(item => ({
-    date: item.date,
-    revenue: item.value,
-  })) || [];
-
-  const revenueByBranchData = dashboardData?.data.charts.bars.revenue_by_branch || [];
-
-  // Helper functions for colors
-  function getColorForLabel(label: string): string {
-    const colors: Record<string, string> = {
-      luxury: "#8B5CF6",
-      compact: "#3B82F6",
-      suv: "#10B981",
-      sports: "#F59E0B",
-    };
-    return colors[label.toLowerCase()] || "#6B7280";
-  }
-
-  function getStatusColor(status: string): string {
-    const colors: Record<string, string> = {
-      pending: "#F59E0B",
-      confirmed: "#10B981",
-      checked_out: "#3B82F6",
-      cancelled: "#EF4444",
-      other: "#6B7280",
-    };
-    return colors[status.toLowerCase()] || "#6B7280";
-  }
-
-  const COLORS = ["#3B82F6", "#10B981", "#8B5CF6", "#F59E0B"];
-
-  // Recent activity items
-  const recentActivities = [
-    {
-      icon: CheckCircle,
-      color: "text-green-500",
-      bg: "bg-green-500/10",
-      text: `Due service schedules: ${dashboardData?.data.kpis.due_service_schedules_by_date || 0}`,
-      time: "Today",
-    },
-    {
-      icon: AlertCircle,
-      color: "text-orange-500",
-      bg: "bg-orange-500/10",
-      text: `Open incidents: ${dashboardData?.data.kpis.open_or_review_incidents || 0}`,
-      time: "Active",
-    },
-    {
-      icon: Clock,
-      color: "text-blue-500",
-      bg: "bg-blue-500/10",
-      text: `Services in progress: ${dashboardData?.data.kpis.open_or_in_progress_services || 0}`,
-      time: "Ongoing",
-    },
+  const quickNav: QuickNavItem[] = [
+    { label:'Reservations',   sub:'View & manage',       icon:Calendar,    path:'/admin-reservations',       color:'text-blue-600',   bg:'bg-blue-50' },
+    { label:'Payments',       sub:'Revenue & history',   icon:CreditCard,  path:'/admin-payments',           color:'text-emerald-600',bg:'bg-emerald-50' },
+    { label:'Users',          sub:'Customer accounts',   icon:Users,       path:'/admin-users',              color:'text-purple-600', bg:'bg-purple-50' },
+    { label:'Vehicles',       sub:'Fleet units',         icon:Car,         path:'/admin-vehicles',           color:'text-amber-600',  bg:'bg-amber-50' },
+    { label:'Branches',       sub:'Office locations',    icon:Building2,   path:'/admin-branches',           color:'text-cyan-600',   bg:'bg-cyan-50' },
+    { label:'Driver Bookings',sub:'Driver-assisted',     icon:UserCheck,   path:'/admin-driver-bookings',    color:'text-indigo-600', bg:'bg-indigo-50' },
+    { label:'Incidents',      sub:'Damage & reports',    icon:AlertTriangle,path:'/admin-vehicle-incidents', color:'text-red-600',    bg:'bg-red-50' },
+    { label:'Service Orders', sub:'Maintenance',         icon:Wrench,      path:'/admin-service-orders',     color:'text-orange-600', bg:'bg-orange-50' },
+    { label:'Reports',        sub:'Analytics & exports', icon:BarChart3,   path:'/admin-reports',            color:'text-teal-600',   bg:'bg-teal-50' },
+    { label:'Notifications',  sub:'Push & in-app',       icon:Bell,        path:'/admin-notifications',      color:'text-pink-600',   bg:'bg-pink-50' },
+    { label:'Rate Plans',     sub:'Pricing config',      icon:ShieldCheck, path:'/admin-rate-plans',         color:'text-violet-600', bg:'bg-violet-50' },
+    { label:'Promo Codes',    sub:'Discounts & offers',  icon:Tag,         path:'/admin-promo-codes',        color:'text-rose-600',   bg:'bg-rose-50' },
   ];
+
+  if (!authUser) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-center space-y-4 max-w-sm px-6">
+          <div className="bg-slate-100 p-5 rounded-full inline-block">
+            <Lock className="w-10 h-10 text-slate-400" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800">Not signed in</h2>
+          <p className="text-sm text-slate-500">Please log in to access the admin dashboard.</p>
+          <button onClick={() => navigate('/login')}
+            className="mt-2 px-5 py-2.5 rounded-xl bg-[#1EA2E4] text-white text-sm font-semibold hover:bg-[#1891cd] transition-colors">
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  useEffect(() => {
+    if (authUser && !hasAccess) {
+      const roles = authUser.roles ?? [];
+      if (roles.includes('manager')) {
+        navigate('/branch-manager-dashboard', { replace: true });
+      } else if (roles.includes('branch_receptionist')) {
+        navigate('/receptionist-dashboard', { replace: true });
+      } else if (roles.includes('agent')) {
+        navigate('/agentdashboard', { replace: true });
+      } else if (roles.includes('driver')) {
+        navigate('/driver-dashboard', { replace: true });
+      } else {
+        navigate('/dashboardy', { replace: true });
+      }
+    }
+  }, [authUser, hasAccess, navigate]);
+
+  if (isLoading) return <LoadingSkeleton />;
+
+  const k   = data?.kpis;
+  const s   = data?.additional_stats;
+  const mom = s?.mom_revenue_growth ?? null;
+  const periodDays = Math.round((dateRange.to.getTime() - dateRange.from.getTime()) / 86400000) + 1;
 
   return (
-    <div className={`flex h-screen ${themeClasses.bg} relative transition-colors duration-300`}>
-      {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
-        <Sidebar />
-      </div>
-
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Mobile Sidebar */}
-      <div
-        className={`fixed inset-y-0 left-0 z-50 lg:hidden transition-transform duration-300 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      </div>
+    <div className="flex min-h-screen bg-slate-50 font-sans">
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header - Always Visible */}
-        <header
-          className={`${themeClasses.header} backdrop-blur-xl shadow-sm border-b ${themeClasses.border} px-6 py-4 relative z-20`}
-        >
-          <div className="relative flex items-center justify-between">
-            <div className="flex items-center">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className={`lg:hidden mr-4 p-2 rounded-xl ${
-                  isDarkMode ? "bg-gray-700" : "bg-slate-100/50"
-                } hover:bg-opacity-80 transition-all duration-200`}
-              >
-                <Menu className={`w-5 h-5 ${themeClasses.textSecondary}`} />
+
+        {/* ── top header ────────────────────────────────────────────────────── */}
+        <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm px-4 sm:px-6 py-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setSidebarOpen(true)}
+                className="lg:hidden p-2 rounded-xl hover:bg-slate-100 transition-colors">
+                <Menu className="w-5 h-5 text-slate-600" />
               </button>
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2 text-sm">
-                  <span className={themeClasses.textSecondary}>Dashboard</span>
-                  <span className={isDarkMode ? "text-gray-600" : "text-slate-300"}>›</span>
-                  <span className={`${themeClasses.text} font-medium`}>Admin Dashboard</span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-[17px] font-bold text-slate-900 leading-none">Admin Dashboard</h1>
+                  <span className="hidden sm:inline text-xs font-medium text-white bg-[#1EA2E4] px-2 py-0.5 rounded-full">Live</span>
                 </div>
+                {lastUpdated && (
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Updated {lastUpdated.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}
+                  </p>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
-              {/* Date Range Selector - Fixed z-index */}
-              <div className="relative">
-                <button
-                  ref={dateButtonRef}
-                  onClick={() => setShowDatePicker(!showDatePicker)}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-xl ${
-                    isDarkMode ? "bg-gray-700" : "bg-slate-100"
-                  } hover:bg-opacity-80 transition-all duration-200`}
-                >
-                  <Calendar className="w-4 h-4" />
-                  <span className="text-sm">
-                    {dateRange.from && dateRange.to
-                      ? `${dateRange.from} - ${dateRange.to}`
-                      : "Select Date Range"}
-                  </span>
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-                
-                {/* Date Picker Dropdown - Fixed position with higher z-index */}
-                {showDatePicker && (
-                  <div 
-                    ref={datePickerRef}
-                    className={`absolute right-0 mt-2 p-4 rounded-xl shadow-2xl z-50 ${themeClasses.card} border ${themeClasses.border} min-w-[320px] backdrop-blur-md`}
-                    style={{ top: '100%' }}
-                  >
-                    <div className="space-y-3">
-                      <div>
-                        <label className={`text-sm ${themeClasses.textSecondary} block mb-1 font-medium`}>From Date</label>
-                        <input
-                          type="date"
-                          name="from"
-                          value={dateRange.from}
-                          onChange={handleDateRangeChange}
-                          className={`w-full px-3 py-2 rounded-lg border ${themeClasses.border} ${themeClasses.text} focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800`}
-                        />
-                      </div>
-                      <div>
-                        <label className={`text-sm ${themeClasses.textSecondary} block mb-1 font-medium`}>To Date</label>
-                        <input
-                          type="date"
-                          name="to"
-                          value={dateRange.to}
-                          onChange={handleDateRangeChange}
-                          className={`w-full px-3 py-2 rounded-lg border ${themeClasses.border} ${themeClasses.text} focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800`}
-                        />
-                      </div>
-                      <div className="flex space-x-2 pt-2">
-                        <button
-                          onClick={applyDateRange}
-                          className="flex-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
-                        >
-                          Apply
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowDatePicker(false);
-                            fetchDashboardData();
-                          }}
-                          className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium"
-                        >
-                          Reset
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+            <div className="flex items-center gap-2">
+              {/* date range */}
+              <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600">
+                <Calendar className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                <input type="date" value={fmtDate(dateRange.from)} max={fmtDate(dateRange.to)}
+                  onChange={e => setDateRange(p => ({ ...p, from: new Date(e.target.value) }))}
+                  className="bg-transparent border-none outline-none w-28 cursor-pointer text-xs text-slate-700" />
+                <span className="text-slate-300">→</span>
+                <input type="date" value={fmtDate(dateRange.to)} min={fmtDate(dateRange.from)}
+                  onChange={e => setDateRange(p => ({ ...p, to: new Date(e.target.value) }))}
+                  className="bg-transparent border-none outline-none w-28 cursor-pointer text-xs text-slate-700" />
               </div>
-
-              {/* Refresh Button */}
-              <button
-                onClick={() => fetchDashboardData()}
-                disabled={loading}
-                className={`p-2 rounded-xl ${
-                  isDarkMode ? "bg-gray-700 hover:bg-gray-600" : "bg-slate-100 hover:bg-slate-200"
-                } transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+              <button onClick={refresh} disabled={isRefreshing}
+                className="p-2.5 rounded-xl hover:bg-slate-100 transition-colors disabled:opacity-40"
+                title="Refresh data">
+                <RefreshCw className={`w-4 h-4 text-slate-600 ${isRefreshing ? 'animate-spin' : ''}`} />
               </button>
-
-              {/* User Profile */}
-              <div className={`flex items-center space-x-3 pl-4 border-l ${themeClasses.border}`}>
-                <div className="text-right hidden sm:block">
-                  <div className={`text-sm font-semibold ${themeClasses.text}`}>{firstName}</div>
-                  <div className={`text-xs ${themeClasses.textSecondary}`}>Admin</div>
-                </div>
-                <div className="relative">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25">
-                    <span className="text-white font-semibold text-sm">
-                      {firstName.split(" ").map((n) => n[0]).join("")}
-                    </span>
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 border-2 border-white rounded-full shadow-sm"></div>
-                </div>
-                <ChevronDown className={`w-4 h-4 ${themeClasses.textSecondary}`} />
-              </div>
             </div>
           </div>
         </header>
 
-        {/* Dashboard Content - Scrollable Area */}
-        <main className="flex-1 overflow-y-auto p-6 space-y-8">
-          {loading ? (
-            // Loading state - only shows in content area
-            <div className="flex items-center justify-center h-96">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                <p className={themeClasses.text}>Loading dashboard data...</p>
+        {/* ── main scroll area ───────────────────────────────────────────────── */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+            {/* error */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-5 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-900">Failed to load dashboard</p>
+                  <p className="text-sm text-red-700 mt-1">{error}</p>
+                  <button onClick={refresh} className="mt-3 text-sm font-semibold text-red-600 hover:text-red-800 underline underline-offset-2">Try again</button>
+                </div>
+              </div>
+            )}
+
+            {/* ── hero strip ──────────────────────────────────────────────────── */}
+            <div className="relative rounded-2xl overflow-hidden"
+              style={{ background: `linear-gradient(135deg, ${BRAND_NAVY} 0%, #132540 55%, ${BRAND_BLUE} 100%)` }}>
+              {/* decorative rings */}
+              <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full border-[50px] border-white/5 pointer-events-none" />
+              <div className="absolute -bottom-20 right-24 w-52 h-52 rounded-full border-[35px] border-white/5 pointer-events-none" />
+              <div className="absolute top-0 left-1/2 w-96 h-96 rounded-full border-[60px] border-white/[0.02] pointer-events-none -translate-x-1/2 -translate-y-1/2" />
+
+              <div className="relative z-10 px-6 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+                <div>
+                  <p className="text-white/60 text-sm font-medium">Welcome back, Admin</p>
+                  <h2 className="text-white text-2xl font-bold mt-0.5">MoRental Overview</h2>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="bg-white/10 text-white/80 text-xs font-medium px-2.5 py-1 rounded-full">
+                      {fmtDate(dateRange.from)} → {fmtDate(dateRange.to)}
+                    </span>
+                    <span className="bg-white/10 text-white/80 text-xs font-medium px-2.5 py-1 rounded-full">
+                      {periodDays} day window
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-6 sm:gap-8">
+                  <HeroStat label="Revenue" value={fmtCurrency(k?.total_revenue_paid_in_range)} />
+                  <div className="w-px h-8 bg-white/15 hidden sm:block" />
+                  <HeroStat label="Active Now" value={fmt(k?.active_reservations_now)} />
+                  <div className="w-px h-8 bg-white/15 hidden sm:block" />
+                  <HeroStat label="Fleet Active" value={fmt(k?.active_fleet)} />
+                  <div className="w-px h-8 bg-white/15 hidden sm:block" />
+                  <HeroStat label="Customers" value={fmt(s?.total_customers)} />
+                </div>
               </div>
             </div>
-          ) : error ? (
-            // Error state
-            <div className="flex items-center justify-center h-96">
-              <div className="text-center">
-                <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                <p className="text-red-500 mb-4">{error}</p>
-                <button
-                  onClick={() => fetchDashboardData()}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Hero Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Hero Section - Left Column */}
-                <div className="relative rounded-xl overflow-hidden shadow-2xl min-h-[400px] group">
-                  <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-                    <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse"></div>
-                    <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }}></div>
-                  </div>
-                  
-                  {heroSlides.map((slide, index) => (
-                    <div
-                      key={index}
-                      className={`absolute inset-0 transition-all duration-1000 ${
-                        currentSlide === index ? "opacity-100 scale-100" : "opacity-0 scale-95"
-                      }`}
-                    >
-                      <img src={slide.image} alt={slide.title} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-transparent"></div>
-                    </div>
-                  ))}
-                  
-                  <div className="relative z-10 h-full flex items-center px-6 sm:px-8 py-12">
-                    <div className="w-full space-y-6">
-                      <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-full bg-cyan-500/20 backdrop-blur-sm border border-cyan-500/50 w-fit">
-                        <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
-                        <span className="text-sm font-semibold text-cyan-300">Premium Fleet</span>
-                      </div>
-                      <div>
-                        <h1 className="text-3xl sm:text-4xl font-bold text-white leading-tight mb-2">
-                          {heroSlides[currentSlide].title}
-                          <br />
-                          <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                            {heroSlides[currentSlide].subtitle}
-                          </span>
-                        </h1>
-                        <p className="text-sm text-slate-200 max-w-md leading-relaxed">
-                          {heroSlides[currentSlide].description}
-                        </p>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                        <button className="px-5 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold rounded-lg transition-all duration-300 shadow-lg shadow-cyan-500/40 hover:shadow-cyan-500/60 hover:scale-105 text-xs sm:text-sm">
-                          Book Now
-                        </button>
-                        <button className="px-5 py-2 bg-white/10 hover:bg-white/20 border-2 border-white/30 hover:border-white/60 text-white font-bold rounded-lg backdrop-blur-sm transition-all duration-300 text-xs sm:text-sm">
-                          View Fleet
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap gap-4 pt-3 border-t border-white/10">
-                        <div>
-                          <div className="text-xl font-bold text-cyan-400">{dashboardData?.data.kpis.total_vehicles}+</div>
-                          <div className="text-xs text-slate-300">Vehicles</div>
-                        </div>
-                        <div>
-                          <div className="text-xl font-bold text-cyan-400">{dashboardData?.data.kpis.reservations_in_range}+</div>
-                          <div className="text-xs text-slate-300">Reservations</div>
-                        </div>
-                        <div>
-                          <div className="text-xl font-bold text-cyan-400">24/7</div>
-                          <div className="text-xs text-slate-300">Support</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <button
-                    onClick={() => setCurrentSlide((prev) => (prev - 1 + heroSlides.length) % heroSlides.length)}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-white/20 hover:bg-white/40 backdrop-blur-md p-2 rounded-full text-white transition-all duration-300"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setCurrentSlide((prev) => (prev + 1) % heroSlides.length)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-white/20 hover:bg-white/40 backdrop-blur-md p-2 rounded-full text-white transition-all duration-300"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                  
-                  <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex space-x-2 z-20">
-                    {heroSlides.map((_, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setCurrentSlide(index)}
-                        className={`rounded-full transition-all duration-300 ${
-                          currentSlide === index
-                            ? "bg-gradient-to-r from-cyan-400 to-blue-400 w-6 h-2"
-                            : "bg-white/30 hover:bg-white/50 w-2 h-2"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
 
-                {/* Right Column - Featured Cars */}
-                <div className="space-y-4">
-                  <div className="mb-4">
-                    <h2 className={`text-2xl font-bold ${themeClasses.text}`}>Featured Cars</h2>
-                    <p className={`text-sm ${themeClasses.textSecondary}`}>Popular rental options</p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {featuredCars.map((car) => (
-                      <div
-                        key={car.id}
-                        className={`group relative overflow-hidden rounded-2xl ${themeClasses.card} backdrop-blur-sm border ${themeClasses.border} hover:shadow-xl transition-all duration-300 hover:scale-[1.02] cursor-pointer`}
-                      >
-                        <div className="relative h-40 overflow-hidden">
-                          <img src={car.image} alt={car.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                          <div className={`absolute top-3 right-3 ${car.badgeColor} text-white text-xs font-semibold px-3 py-1 rounded-full`}>
-                            {car.badge}
-                          </div>
-                        </div>
-                        <div className="p-3">
-                          <h3 className={`text-base font-bold ${themeClasses.text}`}>{car.name}</h3>
-                          <p className={`text-xs ${themeClasses.textSecondary} mb-3`}>{car.type}</p>
-                          <div className="space-y-2 mb-4">
-                            <div className="flex items-center justify-between">
-                              <span className={`text-sm font-bold text-blue-500`}>{car.price}</span>
-                              <div className="flex items-center space-x-1 text-xs text-green-500">
-                                <span>Available</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+            {/* ── KPIs ──────────────────────────────────────────────────────── */}
+            <section>
+              <SectionLabel>Key Metrics</SectionLabel>
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+                <KpiCard title="Active Branches"   value={fmt(k?.total_branches)}  sub="Operational locations"    icon={Building2}   accent="text-blue-600"   bg="bg-blue-50" />
+                <KpiCard title="Total Fleet"        value={fmt(k?.total_vehicles)}  sub={`${fmt(k?.active_fleet)} active`} icon={Car} accent="text-emerald-600" bg="bg-emerald-50" />
+                <KpiCard title="Revenue"            value={fmtCurrency(k?.total_revenue_paid_in_range)} sub="Paid in period" icon={DollarSign} accent="text-amber-600" bg="bg-amber-50" trend={mom} />
+                <KpiCard title="Total Customers"    value={fmt(s?.total_customers)} sub="Registered accounts"     icon={Users}      accent="text-violet-600"  bg="bg-violet-50" />
+                <KpiCard title="Reservations"       value={fmt(k?.reservations_in_range)} sub="Bookings in period" icon={Calendar}  accent="text-purple-600" bg="bg-purple-50" />
+                <KpiCard title="Active Bookings"    value={fmt(k?.active_reservations_now)} sub="Pending / checked-out" icon={Activity} accent="text-cyan-600" bg="bg-cyan-50" />
+                <KpiCard title="Open Incidents"     value={fmt(k?.open_or_review_incidents)} sub="Needs resolution"  icon={AlertTriangle} accent="text-red-600"   bg="bg-red-50" />
+                <KpiCard title="Service Orders"     value={fmt(k?.open_or_in_progress_services)} sub={`${fmt(k?.due_service_schedules_by_date)} due soon`} icon={Wrench} accent="text-orange-600" bg="bg-orange-50" />
+                <KpiCard title="Driver Bookings"    value={fmt(k?.driver_bookings_in_range)} sub="In period"          icon={UserCheck} accent="text-indigo-600" bg="bg-indigo-50" />
               </div>
+            </section>
 
-              {/* Metrics Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
-                {metrics.map((metric, index) => {
-                  const IconComponent = metric.icon;
-                  return (
-                    <div
-                      key={index}
-                      className={`group relative overflow-hidden rounded-2xl p-5 transition-all duration-500 hover:scale-[1.02] hover:shadow-xl cursor-pointer ${metric.bgColor} ${metric.borderColor} border backdrop-blur-sm hover:-translate-y-1`}
-                    >
-                      <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center space-x-2">
-                            <div className={`p-2 rounded-xl ${isDarkMode ? "bg-white/10" : "bg-white/20"} backdrop-blur-sm group-hover:scale-110 transition-transform duration-300`}>
-                              <IconComponent className={`w-4 h-4 ${isDarkMode ? "text-white" : "text-slate-700"}`} />
-                            </div>
-                            <TrendingUp className="w-3 h-3 text-green-600 animate-pulse" />
-                          </div>
-                          <div className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-semibold text-white bg-gradient-to-r ${metric.color} shadow-sm`}>
-                            <Activity className="w-3 h-3" />
-                            <span>{metric.trend}</span>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-baseline space-x-1">
-                            {metric.unit && <span className={`text-sm ${isDarkMode ? "text-gray-300" : "text-slate-600"}`}>{metric.unit}</span>}
-                            <span className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-slate-800"} tabular-nums`}>
-                              {animatedValues[index]?.toLocaleString() || 0}
-                            </span>
-                          </div>
-                          <h3 className={`text-xs font-medium ${isDarkMode ? "text-gray-300" : "text-slate-600"} leading-tight`}>
-                            {metric.label}
-                          </h3>
-                        </div>
-                        <div className="mt-3 relative">
-                          <div className={`w-full h-1 ${isDarkMode ? "bg-white/20" : "bg-white/30"} rounded-full overflow-hidden`}>
-                            <div
-                              className={`h-full bg-gradient-to-r ${metric.color} rounded-full animate-progress-bar origin-left transform scale-x-0`}
-                              style={{ animation: `progress-bar 1.5s ease-out ${index * 0.2}s forwards` }}
-                            ></div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+            {/* ── quick navigation ──────────────────────────────────────────── */}
+            <section>
+              <SectionLabel>Quick Navigation</SectionLabel>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
+                {quickNav.map(item => (
+                  <QuickCard key={item.path} item={item} onClick={() => navigate(item.path)} />
+                ))}
               </div>
+            </section>
 
-              {/* Charts Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Vehicle Distribution */}
-                <div className={`${themeClasses.card} backdrop-blur-sm rounded-2xl p-8 shadow-lg border ${themeClasses.border} hover:shadow-xl transition-all duration-300`}>
-                  <div className="mb-6">
-                    <h3 className={`text-xl font-bold ${themeClasses.text} mb-1`}>Vehicle Distribution</h3>
-                    <p className={`text-sm ${themeClasses.textSecondary}`}>Fleet breakdown by type</p>
+            {/* ── charts ────────────────────────────────────────────────────── */}
+            <section>
+              <SectionLabel>Analytics</SectionLabel>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                {/* Revenue trend */}
+                <ChartCard title="Revenue Trend" sub={`${revenuePerDay.length} data points`} icon={TrendingUp}>
+                  <div className="h-60">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={revenuePerDay}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                        <XAxis dataKey="date" tick={{ fill:'#94A3B8', fontSize:11 }} tickLine={false} axisLine={false} />
+                        <YAxis tick={{ fill:'#94A3B8', fontSize:11 }} tickLine={false} axisLine={false}
+                          tickFormatter={v => `$${v >= 1000 ? `${(v/1000).toFixed(1)}k` : v}`} />
+                        <Tooltip contentStyle={ttStyle} formatter={(v:number) => [`$${v.toLocaleString()}`, 'Revenue']} />
+                        <Line type="monotone" dataKey="value" stroke={BRAND_BLUE} strokeWidth={2.5}
+                          dot={{ fill:BRAND_BLUE, r:3, strokeWidth:0 }} activeDot={{ r:5, fill:BRAND_BLUE, strokeWidth:0 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
-                  <div className="h-64">
-                    {vehicleTypeData.length > 0 ? (
+                </ChartCard>
+
+                {/* Bookings by status — donut */}
+                <ChartCard title="Bookings by Status" sub="Current distribution" icon={Activity}>
+                  <div className="h-60">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={reservationsByStatus} cx="50%" cy="42%" innerRadius={52} outerRadius={82} dataKey="value" paddingAngle={3}>
+                          {reservationsByStatus.map((_, i) => (
+                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={ttStyle} />
+                        <Legend verticalAlign="bottom" height={28} iconType="circle" iconSize={8}
+                          formatter={v => <span className="text-xs text-slate-600 capitalize">{v}</span>} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </ChartCard>
+
+                {/* Daily reservations */}
+                <ChartCard title="Daily Reservations" sub="Booking volume over time" icon={Calendar}>
+                  <div className="h-60">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={reservationsPerDay}>
+                        <defs>
+                          <linearGradient id="resGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor="#22C55E" stopOpacity={0.2} />
+                            <stop offset="95%" stopColor="#22C55E" stopOpacity={0}   />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                        <XAxis dataKey="date" tick={{ fill:'#94A3B8', fontSize:11 }} tickLine={false} axisLine={false} />
+                        <YAxis tick={{ fill:'#94A3B8', fontSize:11 }} tickLine={false} axisLine={false} />
+                        <Tooltip contentStyle={ttStyle} formatter={(v:number) => [v, 'Reservations']} />
+                        <Area type="monotone" dataKey="value" stroke="#22C55E" strokeWidth={2.5}
+                          fill="url(#resGrad)" dot={false} activeDot={{ r:5, fill:'#22C55E', strokeWidth:0 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </ChartCard>
+
+                {/* Revenue by branch */}
+                <ChartCard title="Revenue by Branch" sub="Top performing locations" icon={MapPin}>
+                  <div className="h-60">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={revenueByBranch}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                        <XAxis dataKey="name" tick={{ fill:'#94A3B8', fontSize:11 }} tickLine={false} axisLine={false} />
+                        <YAxis tick={{ fill:'#94A3B8', fontSize:11 }} tickLine={false} axisLine={false}
+                          tickFormatter={v => `$${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                        <Tooltip contentStyle={ttStyle} formatter={(v:number) => [`$${v.toLocaleString()}`, 'Revenue']} />
+                        <Bar dataKey="value" fill={BRAND_BLUE} radius={[6,6,0,0]} barSize={30} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </ChartCard>
+
+                {/* Fleet by class — full width */}
+                <div className="lg:col-span-2">
+                  <ChartCard title="Fleet Distribution by Class" sub={`${fmt(k?.total_vehicles)} total vehicles across all classes`} icon={Car}>
+                    <div className="h-48">
                       <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={vehicleTypeData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={90}
-                            paddingAngle={5}
-                            dataKey="value"
-                          >
-                            {vehicleTypeData.map((_entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-gray-500">No data available</div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    {vehicleTypeData.map((item, index) => (
-                      <div key={item.name} className="flex items-center space-x-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                        <span className={`text-xs ${themeClasses.textSecondary}`}>{item.name}</span>
-                        <span className={`text-xs font-semibold ${themeClasses.text}`}>{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Rental Status */}
-                <div className={`${themeClasses.card} backdrop-blur-sm rounded-2xl p-8 shadow-lg border ${themeClasses.border} hover:shadow-xl transition-all duration-300`}>
-                  <div className="mb-6">
-                    <h3 className={`text-xl font-bold ${themeClasses.text} mb-1`}>Reservation Status</h3>
-                    <p className={`text-sm ${themeClasses.textSecondary}`}>Current bookings overview</p>
-                  </div>
-                  <div className="h-64">
-                    {rentalStatusData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={rentalStatusData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "#374151" : "#f1f5f9"} />
-                          <XAxis dataKey="status" tick={{ fontSize: 12, fill: isDarkMode ? "#9CA3AF" : "#64748b" }} />
-                          <YAxis tick={{ fontSize: 12, fill: isDarkMode ? "#9CA3AF" : "#64748b" }} />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: isDarkMode ? "#1F2937" : "#ffffff",
-                              border: `1px solid ${isDarkMode ? "#374151" : "#e2e8f0"}`,
-                              borderRadius: "8px",
-                            }}
-                          />
-                          <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                            {rentalStatusData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={getStatusColor(entry.status)} />
+                        <BarChart data={vehiclesByClass}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                          <XAxis dataKey="name" tick={{ fill:'#94A3B8', fontSize:11 }} tickLine={false} axisLine={false} />
+                          <YAxis tick={{ fill:'#94A3B8', fontSize:11 }} tickLine={false} axisLine={false} />
+                          <Tooltip contentStyle={ttStyle} formatter={(v:number) => [v, 'Vehicles']} />
+                          <Bar dataKey="value" radius={[6,6,0,0]} barSize={42}>
+                            {vehiclesByClass.map((_, i) => (
+                              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                             ))}
                           </Bar>
                         </BarChart>
                       </ResponsiveContainer>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-gray-500">No data available</div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Reservations Trend */}
-                <div className={`${themeClasses.card} backdrop-blur-sm rounded-2xl p-8 shadow-lg border ${themeClasses.border} hover:shadow-xl transition-all duration-300`}>
-                  <div className="mb-6">
-                    <h3 className={`text-xl font-bold ${themeClasses.text} mb-1`}>Reservations Trend</h3>
-                    <p className={`text-sm ${themeClasses.textSecondary}`}>Daily reservations overview</p>
-                  </div>
-                  <div className="h-64">
-                    {reservationsPerDayData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={reservationsPerDayData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "#374151" : "#f1f5f9"} />
-                          <XAxis dataKey="date" tick={{ fontSize: 12, fill: isDarkMode ? "#9CA3AF" : "#64748b" }} />
-                          <YAxis tick={{ fontSize: 12, fill: isDarkMode ? "#9CA3AF" : "#64748b" }} />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: isDarkMode ? "#1F2937" : "#ffffff",
-                              border: `1px solid ${isDarkMode ? "#374151" : "#e2e8f0"}`,
-                              borderRadius: "8px",
-                            }}
-                          />
-                          <Line type="monotone" dataKey="reservations" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-gray-500">No data available</div>
-                    )}
-                  </div>
+                    </div>
+                  </ChartCard>
                 </div>
               </div>
+            </section>
 
-              {/* Additional Charts Row */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {revenueData.length > 0 && (
-                  <div className={`${themeClasses.card} backdrop-blur-sm rounded-2xl p-8 shadow-lg border ${themeClasses.border} hover:shadow-xl transition-all duration-300`}>
-                    <div className="mb-6">
-                      <h3 className={`text-xl font-bold ${themeClasses.text} mb-1`}>Revenue Trend</h3>
-                      <p className={`text-sm ${themeClasses.textSecondary}`}>Daily revenue overview</p>
-                    </div>
-                    <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={revenueData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "#374151" : "#f1f5f9"} />
-                          <XAxis dataKey="date" tick={{ fontSize: 12, fill: isDarkMode ? "#9CA3AF" : "#64748b" }} />
-                          <YAxis tick={{ fontSize: 12, fill: isDarkMode ? "#9CA3AF" : "#64748b" }} />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: isDarkMode ? "#1F2937" : "#ffffff",
-                              border: `1px solid ${isDarkMode ? "#374151" : "#e2e8f0"}`,
-                              borderRadius: "8px",
-                            }}
-                            formatter={(value: any) => [`$${value?.toLocaleString() || 0}`, "Revenue"]}
-                          />
-                          <Line type="monotone" dataKey="revenue" stroke="#F59E0B" strokeWidth={2} dot={{ r: 4 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                )}
+            {/* ── branch map ─────────────────────────────────────────────────── */}
+            <section>
+              <SectionLabel>Branch Network</SectionLabel>
+              <BranchesMap branches={data?.branches ?? []} onViewAll={() => navigate('/admin-branches')} />
+            </section>
 
-                {revenueByBranchData.length > 0 && (
-                  <div className={`${themeClasses.card} backdrop-blur-sm rounded-2xl p-8 shadow-lg border ${themeClasses.border} hover:shadow-xl transition-all duration-300`}>
-                    <div className="mb-6">
-                      <h3 className={`text-xl font-bold ${themeClasses.text} mb-1`}>Revenue by Branch</h3>
-                      <p className={`text-sm ${themeClasses.textSecondary}`}>Branch performance overview</p>
-                    </div>
-                    <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={revenueByBranchData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "#374151" : "#f1f5f9"} />
-                          <XAxis dataKey="label" tick={{ fontSize: 12, fill: isDarkMode ? "#9CA3AF" : "#64748b" }} />
-                          <YAxis tick={{ fontSize: 12, fill: isDarkMode ? "#9CA3AF" : "#64748b" }} />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: isDarkMode ? "#1F2937" : "#ffffff",
-                              border: `1px solid ${isDarkMode ? "#374151" : "#e2e8f0"}`,
-                              borderRadius: "8px",
-                            }}
-                            formatter={(value: any) => [`$${value?.toLocaleString() || 0}`, "Revenue"]}
-                          />
-                          <Bar dataKey="value" radius={[4, 4, 0, 0]} fill="#8B5CF6" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                )}
-              </div>
+            {/* footer */}
+            <footer className="pt-4 pb-2 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-400 gap-1">
+              <span>Data range: <span className="font-medium text-slate-500">{fmtDate(dateRange.from)} → {fmtDate(dateRange.to)}</span></span>
+              <span>© {new Date().getFullYear()} MoRental · Admin Portal</span>
+            </footer>
 
-              {/* Recent Activity */}
-              <div className={`${themeClasses.card} backdrop-blur-sm rounded-2xl p-8 shadow-lg border ${themeClasses.border}`}>
-                <div className="mb-6">
-                  <h3 className={`text-xl font-bold ${themeClasses.text} mb-1`}>Recent Activity</h3>
-                  <p className={`text-sm ${themeClasses.textSecondary}`}>Latest operational updates</p>
-                </div>
-                <div className="space-y-4">
-                  {recentActivities.map((activity, index) => (
-                    <div
-                      key={index}
-                      className={`flex items-center space-x-4 p-4 rounded-xl ${
-                        isDarkMode ? "bg-gray-700/30" : "bg-slate-50/50"
-                      } hover:scale-[1.01] transition-transform duration-200`}
-                    >
-                      <div className={`p-2 rounded-lg ${activity.bg}`}>
-                        <activity.icon className={`w-5 h-5 ${activity.color}`} />
-                      </div>
-                      <div className="flex-1">
-                        <p className={`text-sm font-medium ${themeClasses.text}`}>{activity.text}</p>
-                        <p className={`text-xs ${themeClasses.textSecondary} mt-1`}>{activity.time}</p>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {dashboardData && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                        <span className={`text-sm ${themeClasses.textSecondary}`}>Driver Bookings</span>
-                        <span className={`text-lg font-semibold ${themeClasses.text}`}>
-                          {dashboardData.data.kpis.driver_bookings_in_range ?? "N/A"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                        <span className={`text-sm ${themeClasses.textSecondary}`}>Total Revenue (Paid)</span>
-                        <span className={`text-lg font-semibold ${themeClasses.text}`}>
-                          {dashboardData.data.kpis.total_revenue_paid_in_range 
-                            ? `$${dashboardData.data.kpis.total_revenue_paid_in_range.toLocaleString()}`
-                            : "N/A"}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
+          </div>
         </main>
       </div>
 
-      <style>{`
-        @keyframes progress-bar {
-          from { transform: scaleX(0); }
-          to { transform: scaleX(1); }
-        }
-      `}</style>
+      <style>{`@keyframes shimmer{100%{transform:translateX(100%)}}`}</style>
     </div>
   );
-};
+}
 
-export default Dashboard;
+// ── shared sub-components ──────────────────────────────────────────────────────
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">{children}</h2>
+  );
+}
+
+function HeroStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="text-center sm:text-left">
+      <p className="text-white text-xl font-bold leading-none">{value}</p>
+      <p className="text-white/55 text-xs mt-1">{label}</p>
+    </div>
+  );
+}
+
+function BranchesMap({ branches, onViewAll }: { branches: BranchMapItem[]; onViewAll: () => void }) {
+  const valid = branches.filter(b => b.lat != null && b.lng != null);
+  // Center: average of all branch coords, fallback to Zimbabwe centroid
+  const center: [number, number] = valid.length > 0
+    ? [
+        valid.reduce((s, b) => s + b.lat!, 0) / valid.length,
+        valid.reduce((s, b) => s + b.lng!, 0) / valid.length,
+      ]
+    : [-19.015, 29.154];
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      {/* header */}
+      <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100">
+        <div>
+          <h3 className="text-[15px] font-semibold text-slate-800">Branch Locations</h3>
+          <p className="text-xs text-slate-400 mt-0.5">{valid.length} active location{valid.length !== 1 ? 's' : ''} on the map</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={onViewAll}
+            className="flex items-center gap-1.5 text-xs font-semibold text-[#1EA2E4] hover:text-[#1891cd] transition-colors">
+            View all <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+          <div className="bg-slate-50 p-2 rounded-lg">
+            <MapPin className="w-4 h-4 text-slate-400" />
+          </div>
+        </div>
+      </div>
+
+      {/* map */}
+      <div style={{ height: 440 }}>
+        <MapContainer center={center} zoom={valid.length > 1 ? 6 : 10}
+          style={{ width: '100%', height: '100%' }} scrollWheelZoom={false} zoomControl>
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          {valid.map(b => (
+            <Marker key={b._id} position={[b.lat!, b.lng!]} icon={branchMapIcon}>
+              <Popup>
+                <div style={{ minWidth: 170, lineHeight: 1.5 }}>
+                  <p style={{ fontWeight: 700, fontSize: 13, color: '#0A1628', margin: 0 }}>{b.name}</p>
+                  <p style={{ fontSize: 11, color: '#1EA2E4', margin: '2px 0 0', fontWeight: 600 }}>{b.code}</p>
+                  {(b.address?.city || b.address?.country) && (
+                    <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
+                      {[b.address.city, b.address.country].filter(Boolean).join(', ')}
+                    </p>
+                  )}
+                  <p style={{ fontSize: 11, color: '#94a3b8', margin: '3px 0 0' }}>
+                    {b.lat?.toFixed(4)}, {b.lng?.toFixed(4)}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+      </div>
+
+      {/* branch chips */}
+      {valid.length > 0 && (
+        <div className="px-6 py-4 border-t border-slate-100 flex flex-wrap gap-2">
+          {valid.map(b => (
+            <span key={b._id}
+              className="inline-flex items-center gap-1.5 bg-[#1EA2E4]/10 text-[#1EA2E4] text-xs font-semibold px-3 py-1.5 rounded-full">
+              <MapPin className="w-3 h-3 flex-shrink-0" />{b.name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {valid.length === 0 && (
+        <div className="px-6 py-8 text-center text-sm text-slate-400">
+          No branches with coordinates yet. Add geo data to branches to see them here.
+        </div>
+      )}
+    </div>
+  );
+}

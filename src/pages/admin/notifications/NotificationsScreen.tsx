@@ -18,6 +18,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch } from "../../../app/store";
 import { fetchReservations } from "../../../features/reservation/reservationthunks";
+import { fetchAllPromoCodes, type IPromoCode } from "../../../Services/adminAndManager/promo_code_service";
 
 import {
   Search,
@@ -51,6 +52,10 @@ import {
   Check,
   DollarSign,
   Car,
+  Ticket,
+  Percent,
+  MessageSquare,
+  Smartphone,
 } from "lucide-react";
 
 const AdminNotificationsScreen: React.FC = () => {
@@ -98,6 +103,11 @@ const [selectedScheduleNotification, setSelectedScheduleNotification] = useState
 const [scheduleDateTime, setScheduleDateTime] = useState("");
 const [isScheduling, setIsScheduling] = useState(false);
 const [scheduleId, setScheduleId] = useState<string | null>(null);
+const [promoCodes, setPromoCodes] = useState<IPromoCode[]>([]);
+const [loadingPromos, setLoadingPromos] = useState(false);
+const [showPromoDropdown, setShowPromoDropdown] = useState(false);
+const [promoSearchTerm, setPromoSearchTerm] = useState("");
+const [selectedPromoCode, setSelectedPromoCode] = useState<IPromoCode | null>(null);
 
   // Form state for create/edit
   const [formData, setFormData] = useState<CreateNotificationPayload>({
@@ -149,6 +159,59 @@ const fetchUsers = useCallback(async () => {
     setLoadingUsers(false);
   }
 }, [userSearchTerm]);
+
+const loadPromoCodes = useCallback(async () => {
+  setLoadingPromos(true);
+  try {
+    const res = await fetchAllPromoCodes();
+    setPromoCodes(res.data);
+  } catch {
+    // silent
+  } finally {
+    setLoadingPromos(false);
+  }
+}, []);
+
+useEffect(() => {
+  if (showPromoDropdown && promoCodes.length === 0) loadPromoCodes();
+}, [showPromoDropdown, promoCodes.length, loadPromoCodes]);
+
+const getPromoDisplayValue = (p: IPromoCode) =>
+  p.type === "percent" ? `${p.value}%` : `$${p.value.toFixed(2)}`;
+
+const filteredPromos = promoCodes.filter(p => {
+  const s = promoSearchTerm.toLowerCase();
+  return p.code.toLowerCase().includes(s) || (p.notes || "").toLowerCase().includes(s);
+});
+
+const applyPromoToForm = (promo: IPromoCode) => {
+  const val = getPromoDisplayValue(promo);
+  const expiry = promo.valid_to ? new Date(promo.valid_to).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
+  setFormData(prev => ({
+    ...prev,
+    title: prev.title || `Special Offer: Use ${promo.code} for ${val} OFF!`,
+    message: prev.message || `Use promo code ${promo.code} to enjoy ${val} off your next rental${expiry ? ` — valid until ${expiry}` : ""}. ${promo.notes || "Don't miss this exclusive deal!"}`,
+    data: {
+      ...prev.data,
+      promo_code_id: promo._id,
+      promo_code: promo.code,
+      promo_discount: val,
+      promo_type: promo.type,
+      promo_valid_to: promo.valid_to || null,
+    },
+  }));
+  setSelectedPromoCode(promo);
+  setShowPromoDropdown(false);
+  setPromoSearchTerm("");
+};
+
+const clearPromoFromForm = () => {
+  setSelectedPromoCode(null);
+  setFormData(prev => ({
+    ...prev,
+    data: { ...prev.data, promo_code_id: undefined, promo_code: undefined, promo_discount: undefined, promo_type: undefined, promo_valid_to: undefined },
+  }));
+};
 
 // Fetch reservations from Redux store
 useEffect(() => {
@@ -246,19 +309,18 @@ useEffect(() => {
     message: "",
     type: "info",
     priority: "normal",
-    audience: {
-      scope: "all",
-      user_id: null,
-      roles: [],
-    },
+    audience: { scope: "all", user_id: null, roles: [] },
     channels: ["in_app"],
-   
     expires_at: null,
     action_text: null,
     action_url: null,
     data: {},
     acknowledgements: [],
   });
+  setSelectedPromoCode(null);
+  setSelectedReservationData(null);
+  setShowPromoDropdown(false);
+  setPromoSearchTerm("");
 };
 
   // Open add modal
@@ -291,6 +353,14 @@ useEffect(() => {
     acknowledgements: notification.acknowledgements || [],
   });
   
+  // Restore promo code selection if exists
+  if (notification.data?.promo_code_id) {
+    const found = promoCodes.find(p => p._id === notification.data!.promo_code_id);
+    setSelectedPromoCode(found || null);
+  } else {
+    setSelectedPromoCode(null);
+  }
+
   // Set selected reservation data if exists
   if (notification.data?.reservation_id) {
     setSelectedReservationData({
@@ -747,12 +817,15 @@ const openScheduleModal = (notification: Notification) => {
                         </div>
                         {notification.channels && notification.channels.length > 0 && (
                           <div className="flex flex-wrap gap-1 pt-2">
-                            {notification.channels.map((channel) => (
-                              <span key={channel} className="flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
-                                {channel === "in_app" ? <Bell className="w-3 h-3" /> : <Mail className="w-3 h-3" />}
-                                {channel}
-                              </span>
-                            ))}
+                            {notification.channels.map((channel) => {
+                              const chIcon = channel === "in_app" ? <Bell className="w-3 h-3" /> : channel === "email" ? <Mail className="w-3 h-3" /> : channel === "sms" ? <MessageSquare className="w-3 h-3" /> : <Smartphone className="w-3 h-3" />;
+                              const chLabel = channel === "in_app" ? "In-App" : channel.charAt(0).toUpperCase() + channel.slice(1);
+                              return (
+                                <span key={channel} className="flex items-center gap-1 px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
+                                  {chIcon}{chLabel}
+                                </span>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -948,12 +1021,15 @@ const openScheduleModal = (notification: Notification) => {
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h4 className="text-sm font-semibold text-gray-500 mb-2 uppercase tracking-wider">Channels</h4>
                   <div className="flex flex-wrap gap-2">
-                    {selectedNotification.channels.map((channel) => (
-                      <span key={channel} className="flex items-center gap-1 px-2 py-1 text-sm bg-white rounded-lg border border-gray-200">
-                        {channel === "in_app" ? <Bell className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
-                        {channel}
-                      </span>
-                    ))}
+                    {selectedNotification.channels.map((channel) => {
+                      const chIcon = channel === "in_app" ? <Bell className="w-4 h-4" /> : channel === "email" ? <Mail className="w-4 h-4" /> : channel === "sms" ? <MessageSquare className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />;
+                      const chLabel = channel === "in_app" ? "In-App" : channel.charAt(0).toUpperCase() + channel.slice(1);
+                      return (
+                        <span key={channel} className="flex items-center gap-1 px-2 py-1 text-sm bg-white rounded-lg border border-gray-200">
+                          {chIcon}{chLabel}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1269,42 +1345,44 @@ const openScheduleModal = (notification: Notification) => {
 
             {/* Channels */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Channels</label>
-              <div className="flex gap-4 p-3 border border-gray-300 rounded-lg">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.channels?.includes("in_app") || false}
-                    onChange={(e) => {
-                      const channels = formData.channels || [];
-                      if (e.target.checked) {
-                        setFormData({ ...formData, channels: [...channels, "in_app"] });
-                      } else {
-                        setFormData({ ...formData, channels: channels.filter(c => c !== "in_app") });
-                      }
-                    }}
-                    className="rounded border-gray-300 text-[#1EA2E4] focus:ring-[#1EA2E4]"
-                  />
-                  <Bell className="w-4 h-4 text-gray-600" />
-                  <span className="text-sm text-gray-700">In-App</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.channels?.includes("email") || false}
-                    onChange={(e) => {
-                      const channels = formData.channels || [];
-                      if (e.target.checked) {
-                        setFormData({ ...formData, channels: [...channels, "email"] });
-                      } else {
-                        setFormData({ ...formData, channels: channels.filter(c => c !== "email") });
-                      }
-                    }}
-                    className="rounded border-gray-300 text-[#1EA2E4] focus:ring-[#1EA2E4]"
-                  />
-                  <Mail className="w-4 h-4 text-gray-600" />
-                  <span className="text-sm text-gray-700">Email</span>
-                </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Delivery Channels
+                <span className="ml-1.5 text-xs text-gray-400 font-normal">(select at least one)</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  { id: "in_app", label: "In-App", desc: "Real-time alert in the app", Icon: Bell, color: "#1EA2E4" },
+                  { id: "email", label: "Email", desc: "Send to user's email inbox", Icon: Mail, color: "#6366f1" },
+                  { id: "sms", label: "SMS", desc: "Text message to phone", Icon: MessageSquare, color: "#10b981" },
+                  { id: "push", label: "Push", desc: "Mobile push notification", Icon: Smartphone, color: "#f59e0b" },
+                ].map(({ id, label, desc, Icon, color }) => {
+                  const active = formData.channels?.includes(id) || false;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        const chs = formData.channels || [];
+                        setFormData({ ...formData, channels: active ? chs.filter(c => c !== id) : [...chs, id] });
+                      }}
+                      className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left w-full ${
+                        active ? "border-[#1EA2E4] bg-blue-50/60" : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: active ? `${color}1a` : "#f3f4f6" }}>
+                        <Icon className="w-4 h-4" style={{ color: active ? color : "#9ca3af" }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-sm font-semibold ${active ? "text-gray-900" : "text-gray-500"}`}>{label}</span>
+                          {active && <Check className="w-3.5 h-3.5 text-[#1EA2E4]" />}
+                        </div>
+                        <p className="text-xs text-gray-400 truncate">{desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1491,8 +1569,97 @@ const openScheduleModal = (notification: Notification) => {
   )}
 </div>
 
+{/* Promo Code Section */}
+<div className="border-t border-gray-200 pt-4 mt-2">
+  <div className="flex items-center gap-2 mb-3">
+    <Ticket className="w-4 h-4 text-emerald-600" />
+    <label className="text-sm font-semibold text-gray-700">
+      Promo Code <span className="text-xs text-gray-500 font-normal">(Optional — auto-fills title &amp; message)</span>
+    </label>
+  </div>
+
+  <div className="relative mb-2">
+    <div
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg cursor-pointer bg-white flex justify-between items-center hover:border-emerald-400 transition-colors"
+      onClick={() => setShowPromoDropdown(p => !p)}
+    >
+      <span className={selectedPromoCode || formData.data?.promo_code ? "text-gray-900 font-medium" : "text-gray-400"}>
+        {selectedPromoCode
+          ? `${selectedPromoCode.code} — ${getPromoDisplayValue(selectedPromoCode)} OFF`
+          : formData.data?.promo_code
+          ? `${formData.data.promo_code} — ${formData.data.promo_discount} OFF`
+          : "Select a promo code (optional)"}
+      </span>
+      <ChevronDown className="w-4 h-4 text-gray-400" />
+    </div>
+
+    {showPromoDropdown && (
+      <div className="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-72 overflow-hidden">
+        <div className="p-2 border-b border-gray-100">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by code or notes..."
+              value={promoSearchTerm}
+              onChange={e => setPromoSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              onClick={e => e.stopPropagation()}
+              autoFocus
+            />
+          </div>
         </div>
-        
+        <div className="overflow-y-auto max-h-56">
+          {loadingPromos ? (
+            <div className="p-4 text-center"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-500 mx-auto" /></div>
+          ) : filteredPromos.length === 0 ? (
+            <div className="p-4 text-center text-sm text-gray-500">No promo codes found</div>
+          ) : (
+            filteredPromos.map(promo => (
+              <div
+                key={promo._id}
+                className="px-3 py-2.5 hover:bg-emerald-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors"
+                onClick={() => applyPromoToForm(promo)}
+              >
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="font-mono font-bold text-gray-900 text-sm tracking-wider">{promo.code}</span>
+                  <span className="text-emerald-700 font-semibold text-sm">{getPromoDisplayValue(promo)} OFF</span>
+                </div>
+                <div className="text-xs text-gray-500 capitalize">
+                  {promo.type === "percent" ? "Percentage" : `Fixed ${promo.currency || "USD"}`}
+                  {promo.valid_to && ` · Expires ${new Date(promo.valid_to).toLocaleDateString()}`}
+                  <span className={`ml-2 px-1.5 py-0.5 rounded text-xs ${promo.active ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                    {promo.active ? "Active" : "Inactive"}
+                  </span>
+                </div>
+                {promo.notes && <div className="text-xs text-gray-400 mt-0.5 truncate">{promo.notes}</div>}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    )}
+  </div>
+
+  {(selectedPromoCode || formData.data?.promo_code) && (
+    <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex items-start justify-between gap-3">
+      <div>
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="font-mono font-bold text-emerald-800 text-sm">{selectedPromoCode?.code || formData.data?.promo_code}</span>
+          <span className="text-emerald-700 font-semibold text-sm">{selectedPromoCode ? getPromoDisplayValue(selectedPromoCode) : formData.data?.promo_discount} OFF</span>
+          <span className="text-xs text-emerald-600 capitalize">{selectedPromoCode?.type || formData.data?.promo_type}</span>
+        </div>
+        <p className="text-xs text-emerald-600">Title &amp; message auto-filled — edit them freely above.</p>
+      </div>
+      <button type="button" onClick={clearPromoFromForm} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 flex-shrink-0">
+        <X className="w-3 h-3" /> Remove
+      </button>
+    </div>
+  )}
+</div>
+
+        </div>
+
 
         {/* Footer */}
         <div className="border-t border-gray-200 bg-gray-50 px-6 py-4 flex justify-end gap-3">
@@ -1749,40 +1916,44 @@ const openScheduleModal = (notification: Notification) => {
 
             {/* Channels */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Channels</label>
-              <div className="flex gap-4 p-3 border border-gray-300 rounded-lg">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.channels?.includes("in_app") || false}
-                    onChange={(e) => {
-                      const channels = formData.channels || [];
-                      if (e.target.checked) {
-                        setFormData({ ...formData, channels: [...channels, "in_app"] });
-                      } else {
-                        setFormData({ ...formData, channels: channels.filter(c => c !== "in_app") });
-                      }
-                    }}
-                  />
-                  <Bell className="w-4 h-4" />
-                  <span>In-App</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.channels?.includes("email") || false}
-                    onChange={(e) => {
-                      const channels = formData.channels || [];
-                      if (e.target.checked) {
-                        setFormData({ ...formData, channels: [...channels, "email"] });
-                      } else {
-                        setFormData({ ...formData, channels: channels.filter(c => c !== "email") });
-                      }
-                    }}
-                  />
-                  <Mail className="w-4 h-4" />
-                  <span>Email</span>
-                </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Delivery Channels
+                <span className="ml-1.5 text-xs text-gray-400 font-normal">(select at least one)</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2.5">
+                {[
+                  { id: "in_app", label: "In-App", desc: "Real-time alert in the app", Icon: Bell, color: "#1EA2E4" },
+                  { id: "email", label: "Email", desc: "Send to user's email inbox", Icon: Mail, color: "#6366f1" },
+                  { id: "sms", label: "SMS", desc: "Text message to phone", Icon: MessageSquare, color: "#10b981" },
+                  { id: "push", label: "Push", desc: "Mobile push notification", Icon: Smartphone, color: "#f59e0b" },
+                ].map(({ id, label, desc, Icon, color }) => {
+                  const active = formData.channels?.includes(id) || false;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        const chs = formData.channels || [];
+                        setFormData({ ...formData, channels: active ? chs.filter(c => c !== id) : [...chs, id] });
+                      }}
+                      className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left w-full ${
+                        active ? "border-[#1EA2E4] bg-blue-50/60" : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: active ? `${color}1a` : "#f3f4f6" }}>
+                        <Icon className="w-4 h-4" style={{ color: active ? color : "#9ca3af" }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-sm font-semibold ${active ? "text-gray-900" : "text-gray-500"}`}>{label}</span>
+                          {active && <Check className="w-3.5 h-3.5 text-[#1EA2E4]" />}
+                        </div>
+                        <p className="text-xs text-gray-400 truncate">{desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1962,6 +2133,85 @@ const openScheduleModal = (notification: Notification) => {
                   <X className="w-3 h-3" />
                   Clear selected reservation
                 </button>
+              )}
+            </div>
+
+            {/* Promo Code Section - Edit */}
+            <div className="border-t border-gray-200 pt-4 mt-2">
+              <div className="flex items-center gap-2 mb-3">
+                <Ticket className="w-4 h-4 text-emerald-600" />
+                <label className="text-sm font-semibold text-gray-700">
+                  Promo Code <span className="text-xs text-gray-500 font-normal">(Optional — auto-fills title &amp; message)</span>
+                </label>
+              </div>
+              <div className="relative mb-2">
+                <div
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg cursor-pointer bg-white flex justify-between items-center hover:border-emerald-400 transition-colors"
+                  onClick={() => setShowPromoDropdown(p => !p)}
+                >
+                  <span className={selectedPromoCode || formData.data?.promo_code ? "text-gray-900 font-medium" : "text-gray-400"}>
+                    {selectedPromoCode
+                      ? `${selectedPromoCode.code} — ${getPromoDisplayValue(selectedPromoCode)} OFF`
+                      : formData.data?.promo_code
+                      ? `${formData.data.promo_code} — ${formData.data.promo_discount} OFF`
+                      : "Select a promo code (optional)"}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </div>
+                {showPromoDropdown && (
+                  <div className="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-72 overflow-hidden">
+                    <div className="p-2 border-b border-gray-100">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search by code or notes..."
+                          value={promoSearchTerm}
+                          onChange={e => setPromoSearchTerm(e.target.value)}
+                          className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          onClick={e => e.stopPropagation()}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                    <div className="overflow-y-auto max-h-56">
+                      {loadingPromos ? (
+                        <div className="p-4 text-center"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-500 mx-auto" /></div>
+                      ) : filteredPromos.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-gray-500">No promo codes found</div>
+                      ) : (
+                        filteredPromos.map(promo => (
+                          <div key={promo._id} className="px-3 py-2.5 hover:bg-emerald-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors" onClick={() => applyPromoToForm(promo)}>
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className="font-mono font-bold text-gray-900 text-sm tracking-wider">{promo.code}</span>
+                              <span className="text-emerald-700 font-semibold text-sm">{getPromoDisplayValue(promo)} OFF</span>
+                            </div>
+                            <div className="text-xs text-gray-500 capitalize">
+                              {promo.type === "percent" ? "Percentage" : `Fixed ${promo.currency || "USD"}`}
+                              {promo.valid_to && ` · Expires ${new Date(promo.valid_to).toLocaleDateString()}`}
+                              <span className={`ml-2 px-1.5 py-0.5 rounded text-xs ${promo.active ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>{promo.active ? "Active" : "Inactive"}</span>
+                            </div>
+                            {promo.notes && <div className="text-xs text-gray-400 mt-0.5 truncate">{promo.notes}</div>}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {(selectedPromoCode || formData.data?.promo_code) && (
+                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="font-mono font-bold text-emerald-800 text-sm">{selectedPromoCode?.code || formData.data?.promo_code}</span>
+                      <span className="text-emerald-700 font-semibold text-sm">{selectedPromoCode ? getPromoDisplayValue(selectedPromoCode) : formData.data?.promo_discount} OFF</span>
+                    </div>
+                    <p className="text-xs text-emerald-600">Promo attached — edit title &amp; message freely above.</p>
+                  </div>
+                  <button type="button" onClick={clearPromoFromForm} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 flex-shrink-0">
+                    <X className="w-3 h-3" /> Remove
+                  </button>
+                </div>
               )}
             </div>
           </div>

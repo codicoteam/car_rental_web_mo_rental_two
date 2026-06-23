@@ -1,2030 +1,1176 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ManagerSidebar from "../../../components/ManagerSideBar";
 import {
-    fetchAllRatePlans,
-    createRatePlan,
-    updateRatePlan,
-    deleteRatePlan,
-    getErrorDisplay,
-    normalizeDecimal,
-    type IRatePlan,
-    type CreateRatePlanPayload,
-    type UpdateRatePlanPayload,
-    type VehicleClass,
-    type IRatePlanSeasonalOverride,
-    type IRatePlanTax,
-    type IRatePlanFee,
+  fetchAllRatePlans, createRatePlan, upsertRatePlan, fetchRatePlanById,
+  updateRatePlan, deleteRatePlan,
+  getErrorDisplay, normalizeDecimal, ApiError,
+  type IRatePlan, type CreateRatePlanPayload, type UpdateRatePlanPayload,
+  type VehicleClass, type IRatePlanSeasonalOverride, type IRatePlanTax, type IRatePlanFee,
 } from "../../../Services/adminAndManager/rate_plan_service";
+import { fetchVehicleUnits, type IVehicleUnit } from "../../../Services/adminAndManager/vehicle_units_services";
+import { fetchVehicleModels, type IVehicleModel } from "../../../Services/adminAndManager/vehicle_model_service";
+import { fetchBranches, type IBranch } from "../../../Services/adminAndManager/admin_branch_service";
 import {
-    fetchVehicleUnits,
-    type IVehicleUnit,
-} from "../../../Services/adminAndManager/vehicle_units_services";
-import {
-    fetchVehicleModels,
-    type IVehicleModel,
-} from "../../../Services/adminAndManager/vehicle_model_service";
-import {
-    fetchBranches,
-    type IBranch,
-} from "../../../Services/adminAndManager/admin_branch_service";
-import {
-    Search,
-    Trash2,
-    Eye,
-    Edit,
-    Plus,
-    Filter,
-    X,
-    AlertCircle,
-    CheckCircle,
-    MoreVertical,
-    Building,
-    Tag,
-    DollarSign,
-    Calendar,
-   
-    XCircle,
-    RefreshCw,
-   
-    Layers,
-    Car,
-   
-    Package,
-    Save,
+  Search, Trash2, Eye, Edit, Plus, X, AlertCircle, CheckCircle,
+  MoreVertical, Building2, Tag, DollarSign, Calendar, RefreshCw,
+  Car, Save, Layers, Package, TrendingUp, Percent, Hash,
+  ChevronDown, ChevronUp, Clock, Globe, CreditCard,
 } from "lucide-react";
 
+type RatePlanType = "vehicle_class" | "vehicle_model" | "vehicle_unit";
+
+const vehicleClasses: VehicleClass[] = [
+  "economy", "compact", "midsize", "suv", "luxury", "van", "truck",
+];
+
+const TYPE_META: Record<RatePlanType, { label: string; icon: typeof Car; gradient: string; badge: string }> = {
+  vehicle_class: { label: "By Class", icon: Layers, gradient: "from-blue-600 to-indigo-700", badge: "bg-blue-100 text-blue-800" },
+  vehicle_model: { label: "By Model", icon: Car, gradient: "from-emerald-500 to-teal-700", badge: "bg-emerald-100 text-emerald-800" },
+  vehicle_unit: { label: "By Unit", icon: Package, gradient: "from-violet-500 to-purple-700", badge: "bg-violet-100 text-violet-800" },
+};
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+const initialForm: CreateRatePlanPayload = {
+  name: "", branch_id: "", vehicle_class: "", vehicle_model_id: null, vehicle_id: null,
+  currency: "USD", daily_rate: "0.00", weekly_rate: "", monthly_rate: "", weekend_rate: "",
+  seasonal_overrides: [], taxes: [], fees: [], active: true, valid_from: todayISO(), valid_to: null, notes: "",
+};
+
 const RatePlans: React.FC = () => {
-    // State
-    const [ratePlans, setRatePlans] = useState<IRatePlan[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState("");
-    const [statusFilter, setStatusFilter] = useState<string>("all");
-    const [branchFilter, setBranchFilter] = useState<string>("all");
-    const [vehicleClassFilter, setVehicleClassFilter] = useState<string>("all");
+  const [ratePlans, setRatePlans] = useState<IRatePlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [branchFilter, setBranchFilter] = useState("all");
+  const [vehicleClassFilter, setVehicleClassFilter] = useState("all");
 
-    // Modal states
-    const [selectedRatePlan, setSelectedRatePlan] = useState<IRatePlan | null>(null);
-    const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [ratePlanToDelete, setRatePlanToDelete] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [selectedPlan, setSelectedPlan] = useState<IRatePlan | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [conflictPlanId, setConflictPlanId] = useState<string | null>(null);
+  const [conflictMsg, setConflictMsg] = useState("");
+  const [isViewOpen, setIsViewOpen] = useState(false);
 
-    // Dropdown data
-    const [branches, setBranches] = useState<IBranch[]>([]);
-    const [vehicleModels, setVehicleModels] = useState<IVehicleModel[]>([]);
-    const [vehicleUnits, setVehicleUnits] = useState<IVehicleUnit[]>([]);
+  const [branches, setBranches] = useState<IBranch[]>([]);
+  const [vehicleModels, setVehicleModels] = useState<IVehicleModel[]>([]);
+  const [vehicleUnits, setVehicleUnits] = useState<IVehicleUnit[]>([]);
+  const [formData, setFormData] = useState<CreateRatePlanPayload>(initialForm);
+  const [planType, setPlanType] = useState<RatePlanType>("vehicle_model");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-    // Rate plan types
-    const ratePlanTypes = ["vehicle_class", "vehicle_model", "vehicle_unit"] as const;
-    type RatePlanType = typeof ratePlanTypes[number];
+  const [snackbar, setSnackbar] = useState<{ show: boolean; message: string; type: "success" | "error" | "info" }>({
+    show: false, message: "", type: "info",
+  });
 
-    // Vehicle classes
-    const vehicleClasses: VehicleClass[] = [
-        "economy",
-        "compact",
-        "midsize",
-        "standard",
-        "fullsize",
-        "suv",
-        "luxury",
-        "van",
-        "premium",
-        "sports"
-    ];
-
-    // Initial form state
-    const initialFormData: CreateRatePlanPayload = {
-        name: "",
-        branch_id: "",
-        vehicle_class: "economy",
-        vehicle_model_id: null,
-        vehicle_id: null,
-        currency: "USD",
-        daily_rate: "0.00",
-        weekly_rate: "",
-        monthly_rate: "",
-        weekend_rate: "",
-        seasonal_overrides: [],
-        taxes: [],
-        fees: [],
-        active: true,
-        valid_from: "",
-        valid_to: null,
-        notes: "",
-    };
-
-    // Form states
-    const [formData, setFormData] = useState<CreateRatePlanPayload>(initialFormData);
-    const [selectedRatePlanType, setSelectedRatePlanType] = useState<RatePlanType>("vehicle_class");
-
-    // Snackbar
-    const [snackbar, setSnackbar] = useState<{
-        show: boolean;
-        message: string;
-        type: "success" | "error" | "info";
-    }>({ show: false, message: "", type: "info" });
-
-    // Sidebar state for mobile
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-
-    const managerBranchId = localStorage.getItem('manager_branch_id');
-    const loadRatePlans = useCallback(async () => {
+  const loadAll = useCallback(async () => {
+    setLoading(true); setError(null);
     try {
-        setLoading(true);
-        setError(null);
-        const response = await fetchAllRatePlans();
-        
-        // Filter rate plans by manager's branch ID
-        let filteredPlans = response.data;
-        if (managerBranchId) {
-            filteredPlans = response.data.filter((plan: IRatePlan) => {
-                const planBranchId = typeof plan.branch_id === 'string' 
-                    ? plan.branch_id 
-                    : plan.branch_id?._id;
-                return planBranchId === managerBranchId;
-            });
-        }
-        
-        setRatePlans(filteredPlans);
+      const [pr, br, mr, ur] = await Promise.all([
+        fetchAllRatePlans(), fetchBranches(), fetchVehicleModels(), fetchVehicleUnits(),
+      ]);
+      setRatePlans(pr.data);
+      setBranches(br.data);
+      setVehicleModels(mr.data.items || []);
+      setVehicleUnits(ur.data.items || []);
     } catch (err) {
-        const errorDisplay = getErrorDisplay(err);
-        setError(errorDisplay.message || "Failed to load rate plans");
-        showSnackbar(errorDisplay.message, "error");
+      const d = getErrorDisplay(err);
+      setError(d.message || "Failed to load data");
+      showSnackbar(d.message, "error");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-}, [managerBranchId]);
+  }, []);
 
-    // Load dropdown data
-    const loadDropdownData = useCallback(async () => {
-        try {
-            // Load branches
-            const branchesResponse = await fetchBranches();
-            setBranches(branchesResponse.data);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
-            // Load vehicle models
-            const modelsResponse = await fetchVehicleModels();
-            setVehicleModels(modelsResponse.data.items || []);
+  const preFilledRef = useRef(false);
+  useEffect(() => {
+    if (loading || preFilledRef.current) return;
+    const preVehicleId = searchParams.get("vehicleId");
+    if (!preVehicleId) return;
+    preFilledRef.current = true;
+    const preVehicleName = searchParams.get("vehicleName");
+    setFormData(p => ({
+      ...p,
+      vehicle_id: preVehicleId,
+      name: preVehicleName ? `Rate Plan – ${preVehicleName}` : p.name,
+    }));
+    setPlanType("vehicle_unit");
+    setIsEditMode(false);
+    setIsFormOpen(true);
+  }, [loading, searchParams]);
 
-            // Load vehicle units
-            const unitsResponse = await fetchVehicleUnits();
-            setVehicleUnits(unitsResponse.data.items || []);
-        } catch (err) {
-            console.error("Failed to load dropdown data:", err);
-        }
-    }, []);
+  const showSnackbar = (message: string, type: "success" | "error" | "info") => {
+    setSnackbar({ show: true, message, type });
+    setTimeout(() => setSnackbar(p => ({ ...p, show: false })), 3500);
+  };
 
-    // Initial load
-    useEffect(() => {
-        loadRatePlans();
-        loadDropdownData();
-    }, [loadRatePlans, loadDropdownData]);
+  const closeForm = () => {
+    setIsFormOpen(false);
+    setConflictPlanId(null);
+    setConflictMsg("");
+  };
 
-    // Snackbar helper
-    const showSnackbar = (message: string, type: "success" | "error" | "info") => {
-        setSnackbar({ show: true, message, type });
-        setTimeout(() => {
-            setSnackbar((prev) => ({ ...prev, show: false }));
-        }, 3000);
-    };
+  const openAdd = () => {
+    setFormData(initialForm);
+    setPlanType("vehicle_model");
+    setIsEditMode(false);
+    setConflictPlanId(null);
+    setConflictMsg("");
+    setIsFormOpen(true);
+  };
 
-    // Reset form
-    const resetForm = () => {
-        setFormData(initialFormData);
-        setSelectedRatePlanType("vehicle_class");
-    };
-
-    // Open add modal with empty form
-    const openAddModal = () => {
-        resetForm();
-        setIsAddModalOpen(true);
-    };
-
-    // Open edit modal with rate plan data
-    // const openEditModal = (ratePlan: IRatePlan) => {
-    //     setSelectedRatePlan(ratePlan);
-        
-    //     // Determine rate plan type
-    //     let type: RatePlanType = "vehicle_class";
-    //     if (ratePlan.vehicle_id) type = "vehicle_unit";
-    //     else if (ratePlan.vehicle_model_id) type = "vehicle_model";
-        
-    //     setSelectedRatePlanType(type);
-
-    //     setFormData({
-    //         name: ratePlan.name,
-    //         branch_id: typeof ratePlan.branch_id === 'string' ? ratePlan.branch_id : ratePlan.branch_id?._id || "",
-    //         vehicle_class: ratePlan.vehicle_class,
-    //         vehicle_model_id: ratePlan.vehicle_model_id || null,
-    //         vehicle_id: ratePlan.vehicle_id || null,
-    //         currency: ratePlan.currency,
-    //         daily_rate: normalizeDecimal(ratePlan.daily_rate) || "0.00",
-    //         weekly_rate: normalizeDecimal(ratePlan.weekly_rate) || "",
-    //         monthly_rate: normalizeDecimal(ratePlan.monthly_rate) || "",
-    //         weekend_rate: normalizeDecimal(ratePlan.weekend_rate) || "",
-    //         seasonal_overrides: ratePlan.seasonal_overrides?.map(override => ({
-    //             season: override.season,
-    //             daily_rate: normalizeDecimal(override.daily_rate) || "",
-    //             weekly_rate: normalizeDecimal(override.weekly_rate) || "",
-    //             monthly_rate: normalizeDecimal(override.monthly_rate) || "",
-    //             weekend_rate: normalizeDecimal(override.weekend_rate) || "",
-    //         })) || [],
-    //         taxes: ratePlan.taxes || [],
-    //         fees: ratePlan.fees || [],
-    //         active: ratePlan.active || true,
-    //         valid_from: ratePlan.valid_from || "",
-    //         valid_to: ratePlan.valid_to || null,
-    //         notes: ratePlan.notes || "",
-    //     });
-        
-    //     setIsEditModalOpen(true);
-    // };
-
-    const openEditModal = (ratePlan: IRatePlan) => {
-    setSelectedRatePlan(ratePlan);
-    
-    // Determine rate plan type
+  const openEdit = (plan: IRatePlan) => {
+    setSelectedPlan(plan);
     let type: RatePlanType = "vehicle_class";
-    if (ratePlan.vehicle_id) type = "vehicle_unit";
-    else if (ratePlan.vehicle_model_id) type = "vehicle_model";
-    
-    setSelectedRatePlanType(type);
-
-    // Extract vehicle_id as string or null
-    let vehicleIdValue: string | null = null;
-    if (ratePlan.vehicle_id) {
-        vehicleIdValue = typeof ratePlan.vehicle_id === 'string' 
-            ? ratePlan.vehicle_id 
-            : ratePlan.vehicle_id?._id || null;
-    }
-     // Convert fees amount to string
-    const convertedFees = ratePlan.fees?.map(fee => ({
-        code: fee.code,
-        amount: normalizeDecimal(fee.amount) || ""
-    })) || [];
-
+    if (plan.vehicle_id) type = "vehicle_unit";
+    else if (plan.vehicle_model_id) type = "vehicle_model";
+    setPlanType(type);
+    const vehicleIdValue = plan.vehicle_id
+      ? (typeof plan.vehicle_id === "string" ? plan.vehicle_id : plan.vehicle_id?._id || null)
+      : null;
     setFormData({
-        name: ratePlan.name,
-        branch_id: typeof ratePlan.branch_id === 'string' ? ratePlan.branch_id : ratePlan.branch_id?._id || "",
-        vehicle_class: ratePlan.vehicle_class,
-        vehicle_model_id: ratePlan.vehicle_model_id || null,
-        vehicle_id: vehicleIdValue,
-        currency: ratePlan.currency,
-        daily_rate: normalizeDecimal(ratePlan.daily_rate) || "0.00",
-        weekly_rate: normalizeDecimal(ratePlan.weekly_rate) || "",
-        monthly_rate: normalizeDecimal(ratePlan.monthly_rate) || "",
-        weekend_rate: normalizeDecimal(ratePlan.weekend_rate) || "",
-        seasonal_overrides: ratePlan.seasonal_overrides?.map(override => ({
-            season: override.season,
-            daily_rate: normalizeDecimal(override.daily_rate) || "",
-            weekly_rate: normalizeDecimal(override.weekly_rate) || "",
-            monthly_rate: normalizeDecimal(override.monthly_rate) || "",
-            weekend_rate: normalizeDecimal(override.weekend_rate) || "",
-        })) || [],
-        taxes: ratePlan.taxes || [],
-        fees: convertedFees,
-        active: ratePlan.active || true,
-        valid_from: ratePlan.valid_from || "",
-        valid_to: ratePlan.valid_to || null,
-        notes: ratePlan.notes || "",
+      name: plan.name,
+      branch_id: typeof plan.branch_id === "string" ? plan.branch_id : plan.branch_id?._id || "",
+      vehicle_class: plan.vehicle_class,
+      vehicle_model_id: plan.vehicle_model_id || null,
+      vehicle_id: vehicleIdValue,
+      currency: plan.currency,
+      daily_rate: normalizeDecimal(plan.daily_rate) || "0.00",
+      weekly_rate: normalizeDecimal(plan.weekly_rate) || "",
+      monthly_rate: normalizeDecimal(plan.monthly_rate) || "",
+      weekend_rate: normalizeDecimal(plan.weekend_rate) || "",
+      seasonal_overrides: plan.seasonal_overrides?.map(o => ({
+        season: o.season,
+        daily_rate: normalizeDecimal(o.daily_rate) || "",
+        weekly_rate: normalizeDecimal(o.weekly_rate) || "",
+        monthly_rate: normalizeDecimal(o.monthly_rate) || "",
+        weekend_rate: normalizeDecimal(o.weekend_rate) || "",
+      })) || [],
+      taxes: plan.taxes || [],
+      fees: plan.fees?.map(f => ({ code: f.code, amount: normalizeDecimal(f.amount) || "" })) || [],
+      active: plan.active ?? true,
+      valid_from: plan.valid_from || "",
+      valid_to: plan.valid_to || null,
+      notes: plan.notes || "",
     });
-    
-    setIsEditModalOpen(true);
-};
+    setIsEditMode(true);
+    setIsFormOpen(true);
+  };
 
-    // Open view modal
-    const openViewModal = (ratePlan: IRatePlan) => {
-        setSelectedRatePlan(ratePlan);
-        setIsViewModalOpen(true);
-    };
+  const buildPayload = () => ({
+    ...formData,
+    branch_id: formData.branch_id || null,
+    valid_from: formData.valid_from || new Date().toISOString(),
+    vehicle_model_id: planType === "vehicle_model" ? (formData.vehicle_model_id || null) : null,
+    vehicle_id: planType === "vehicle_unit" ? (formData.vehicle_id || null) : null,
+    weekly_rate: formData.weekly_rate || null,
+    monthly_rate: formData.monthly_rate || null,
+    weekend_rate: formData.weekend_rate || null,
+    fees: (formData.fees || []).map(f => ({ ...f, amount: f.amount || null })),
+    seasonal_overrides: (formData.seasonal_overrides || []).map(o => ({
+      ...o,
+      daily_rate: o.daily_rate || null,
+      weekly_rate: o.weekly_rate || null,
+      monthly_rate: o.monthly_rate || null,
+      weekend_rate: o.weekend_rate || null,
+    })),
+  });
 
-    // Handle add rate plan
-    const handleAddRatePlan = async () => {
-        try {
-            // Prepare data based on selected type
-            const payload: CreateRatePlanPayload = {
-                ...formData,
-                vehicle_model_id: selectedRatePlanType === "vehicle_model" ? formData.vehicle_model_id : null,
-                vehicle_id: selectedRatePlanType === "vehicle_unit" ? formData.vehicle_id : null,
-                vehicle_class: selectedRatePlanType === "vehicle_class" ? formData.vehicle_class : "",
-            };
-
-            await createRatePlan(payload);
-            showSnackbar("Rate plan created successfully", "success");
-            setIsAddModalOpen(false);
-            resetForm();
-            loadRatePlans();
-        } catch (err) {
-            const errorDisplay = getErrorDisplay(err);
-            showSnackbar(errorDisplay.message, "error");
-        }
-    };
-
-    // Handle update rate plan
-    const handleUpdateRatePlan = async () => {
-        if (!selectedRatePlan) return;
-
-        try {
-            // Prepare data based on selected type
-            const payload: UpdateRatePlanPayload = {
-                ...formData,
-                vehicle_model_id: selectedRatePlanType === "vehicle_model" ? formData.vehicle_model_id : null,
-                vehicle_id: selectedRatePlanType === "vehicle_unit" ? formData.vehicle_id : null,
-                vehicle_class: selectedRatePlanType === "vehicle_class" ? formData.vehicle_class : "",
-            };
-
-            await updateRatePlan(selectedRatePlan._id, payload);
-            showSnackbar("Rate plan updated successfully", "success");
-            setIsEditModalOpen(false);
-            setSelectedRatePlan(null);
-            loadRatePlans();
-        } catch (err) {
-            const errorDisplay = getErrorDisplay(err);
-            showSnackbar(errorDisplay.message, "error");
-        }
-    };
-
-    // Handle delete rate plan
-    const handleDeleteRatePlan = async (ratePlanId: string) => {
-        try {
-            await deleteRatePlan(ratePlanId);
-            showSnackbar("Rate plan deleted successfully", "success");
-            setRatePlanToDelete(null);
-            loadRatePlans();
-        } catch (err) {
-            const errorDisplay = getErrorDisplay(err);
-            showSnackbar(errorDisplay.message, "error");
-        }
-    };
-
-    // Handle seasonal override changes
-    const handleSeasonalOverrideChange = (
-        index: number,
-        field: keyof IRatePlanSeasonalOverride,
-        value: string
-    ) => {
-        setFormData((prev) => {
-            const overrides = [...(prev.seasonal_overrides || [])];
-            if (!overrides[index]) {
-                overrides[index] = {
-                    season: { name: "", start: "", end: "" },
-                    daily_rate: "",
-                    weekly_rate: "",
-                    monthly_rate: "",
-                    weekend_rate: "",
-                };
-            }
-
-            if (field === 'season') {
-                const [seasonField, seasonValue] = value.split('.');
-                overrides[index] = {
-                    ...overrides[index],
-                    season: {
-                        ...overrides[index].season!,
-                        [seasonField]: seasonValue,
-                    },
-                };
-            } else {
-                overrides[index] = {
-                    ...overrides[index],
-                    [field]: value,
-                };
-            }
-
-            return {
-                ...prev,
-                seasonal_overrides: overrides,
-            };
-        });
-    };
-
-    // Add seasonal override
-    const addSeasonalOverride = () => {
-        setFormData((prev) => ({
-            ...prev,
-            seasonal_overrides: [
-                ...(prev.seasonal_overrides || []),
-                {
-                    season: { name: "", start: "", end: "" },
-                    daily_rate: "",
-                    weekly_rate: "",
-                    monthly_rate: "",
-                    weekend_rate: "",
-                },
-            ],
-        }));
-    };
-
-    // Remove seasonal override
-    const removeSeasonalOverride = (index: number) => {
-        setFormData((prev) => {
-            const overrides = [...(prev.seasonal_overrides || [])];
-            overrides.splice(index, 1);
-            return { ...prev, seasonal_overrides: overrides };
-        });
-    };
-
-    // Handle tax changes
-    const handleTaxChange = (index: number, field: keyof IRatePlanTax, value: string) => {
-        setFormData((prev) => {
-            const taxes = [...(prev.taxes || [])];
-            if (!taxes[index]) {
-                taxes[index] = { code: "", rate: 0 };
-            }
-
-            taxes[index] = {
-                ...taxes[index],
-                [field]: field === 'rate' ? parseFloat(value) || 0 : value,
-            };
-
-            return { ...prev, taxes };
-        });
-    };
-
-    // Add tax
-    const addTax = () => {
-        setFormData((prev) => ({
-            ...prev,
-            taxes: [...(prev.taxes || []), { code: "", rate: 0 }],
-        }));
-    };
-
-    // Remove tax
-    const removeTax = (index: number) => {
-        setFormData((prev) => {
-            const taxes = [...(prev.taxes || [])];
-            taxes.splice(index, 1);
-            return { ...prev, taxes };
-        });
-    };
-
-    // Handle fee changes
-    const handleFeeChange = (index: number, field: keyof IRatePlanFee, value: string) => {
-        setFormData((prev) => {
-            const fees = [...(prev.fees || [])];
-            if (!fees[index]) {
-                fees[index] = { code: "", amount: "" };
-            }
-
-            fees[index] = {
-                ...fees[index],
-                [field]: value,
-            };
-
-            return { ...prev, fees };
-        });
-    };
-
-    // Add fee
-    const addFee = () => {
-        setFormData((prev) => ({
-            ...prev,
-            fees: [...(prev.fees || []), { code: "", amount: "" }],
-        }));
-    };
-
-    // Remove fee
-    const removeFee = (index: number) => {
-        setFormData((prev) => {
-            const fees = [...(prev.fees || [])];
-            fees.splice(index, 1);
-            return { ...prev, fees };
-        });
-    };
-
-    // Filter rate plans
-    const filteredRatePlans = ratePlans.filter((plan) => {
-        const matchesSearch =
-            searchTerm === "" ||
-            plan.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            plan.currency.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (plan.notes && plan.notes.toLowerCase().includes(searchTerm.toLowerCase()));
-
-        const matchesStatus =
-            statusFilter === "all" ||
-            (statusFilter === "active" && plan.active) ||
-            (statusFilter === "inactive" && !plan.active);
-
-        const matchesBranch =
-            branchFilter === "all" ||
-            (typeof plan.branch_id === 'string' 
-                ? plan.branch_id === branchFilter
-                : plan.branch_id?._id === branchFilter);
-
-        const matchesVehicleClass =
-            vehicleClassFilter === "all" ||
-            plan.vehicle_class === vehicleClassFilter;
-
-        return matchesSearch && matchesStatus && matchesBranch && matchesVehicleClass;
-    });
-
-    // Get unique branches for filter
-    const uniqueBranches = branches.filter(branch => 
-        ratePlans.some(plan => 
-            typeof plan.branch_id === 'string' 
-                ? plan.branch_id === branch._id
-                : plan.branch_id?._id === branch._id
-        )
-    );
-
-    // Format date
-    const formatDate = (dateString?: string | null) => {
-        if (!dateString) return "N/A";
-        return new Date(dateString).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-        });
-    };
-
-    // Format currency
-    const formatCurrency = (amount: any, currency: string = "USD") => {
-        const num = typeof amount === 'number' ? amount : 
-                   typeof amount === 'string' ? parseFloat(amount) : 
-                   amount?.$numberDecimal ? parseFloat(amount.$numberDecimal) : 0;
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: currency,
-            minimumFractionDigits: 2,
-        }).format(num);
-    };
-
-    // Get display name for branch
-    const getBranchName = (branch: string | { _id: string; name?: string } | null) => {
-        if (!branch) return "N/A";
-        if (typeof branch === 'string') {
-            const found = branches.find(b => b._id === branch);
-            return found?.name || branch;
-        }
-        return branch.name || branch._id;
-    };
-
-    // Get display name for vehicle model
-    const getVehicleModelName = (modelId: string | null) => {
-        if (!modelId) return "N/A";
-        const model = vehicleModels.find(m => m._id === modelId);
-        return model ? `${model.make} ${model.model} ${model.year}` : modelId;
-    };
-   
-    // Get display name for vehicle unit - Using union type with optional properties
-const getVehicleUnitName = (unitId: string | { _id?: string; vin?: string; plate_number?: string } | null) => {
-    if (!unitId) return "N/A";
-    // If it's an object with vin and plate_number
-    if (typeof unitId === 'object' && unitId !== null) {
-        const vin = unitId.vin || '';
-        const plateNumber = unitId.plate_number || '';
-        return `${vin} (${plateNumber})`;
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const payload = buildPayload();
+      if (isEditMode && selectedPlan) {
+        await updateRatePlan(selectedPlan._id, payload as UpdateRatePlanPayload);
+        showSnackbar("Rate plan updated!", "success");
+        closeForm();
+        loadAll();
+      } else {
+        await createRatePlan(payload as CreateRatePlanPayload);
+        showSnackbar("Rate plan created!", "success");
+        closeForm();
+        loadAll();
+      }
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && err.data?.existingId) {
+        setConflictPlanId(err.data.existingId as string);
+        setConflictMsg(err.message);
+      } else {
+        showSnackbar(getErrorDisplay(err).message, "error");
+      }
+    } finally {
+      setSaving(false);
     }
-    // If it's a string ID, look it up in vehicleUnits array
-    if (typeof unitId === 'string') {
-        const unit = vehicleUnits.find(u => u._id === unitId);
-        return unit ? `${unit.vin} (${unit.plate_number})` : unitId;
+  };
+
+  const handleEditExisting = async () => {
+    if (!conflictPlanId) return;
+    setSaving(true);
+    try {
+      const existing = await fetchRatePlanById(conflictPlanId);
+      setConflictPlanId(null);
+      setConflictMsg("");
+      openEdit(existing);
+    } catch {
+      showSnackbar("Failed to load existing plan", "error");
+    } finally {
+      setSaving(false);
     }
-    return "N/A";
-};
+  };
 
-    return (
-        <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
-            {/* Sidebar */}
-            <ManagerSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+  const handleReplace = async () => {
+    setSaving(true);
+    try {
+      const payload = buildPayload();
+      await upsertRatePlan(payload as CreateRatePlanPayload);
+      showSnackbar("Rate plan replaced successfully!", "success");
+      closeForm();
+      loadAll();
+    } catch (err) {
+      showSnackbar(getErrorDisplay(err).message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
-            {/* Main Content - Fixed layout with scrollable content area */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Header - Fixed at top */}
-                <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4 shadow-sm z-10">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center">
-                            <button
-                                onClick={() => setSidebarOpen(true)}
-                                className="lg:hidden mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                            >
-                                <MoreVertical className="w-5 h-5 text-gray-600" />
-                            </button>
-                            <div>
-                                <h1 className="text-2xl font-bold text-gray-800">Rate Plans Management</h1>
-                                <p className="text-sm text-gray-600 mt-1">Manage pricing and rate plans</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
-                                Total: <span className="font-semibold">{ratePlans.length}</span> plans
-                            </div>
-                            <button
-                                onClick={openAddModal}
-                                className="flex items-center gap-2 px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium"
-                            >
-                                <Plus className="w-5 h-5" />
-                                <span>Add Rate Plan</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteRatePlan(id);
+      showSnackbar("Rate plan deleted", "success");
+      setDeleteTarget(null);
+      loadAll();
+    } catch (err) {
+      showSnackbar(getErrorDisplay(err).message, "error");
+    }
+  };
 
-                {/* Scrollable Content Area */}
-                <div className="flex-1 overflow-y-auto">
-                    {/* Filters & Search */}
-                    <div className="p-6">
-                        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                            <div className="flex flex-col lg:flex-row gap-4">
-                                {/* Search */}
-                                <div className="flex-1">
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search rate plans by name, currency, or notes..."
-                                            value={searchTerm}
-                                            onChange={(e) => setSearchTerm(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent transition-all"
-                                        />
-                                    </div>
-                                </div>
+  const addOverride = () => setFormData(p => ({
+    ...p, seasonal_overrides: [...(p.seasonal_overrides || []),
+      { season: { name: "", start: "", end: "" }, daily_rate: "", weekly_rate: "", monthly_rate: "", weekend_rate: "" }],
+  }));
+  const removeOverride = (i: number) => setFormData(p => {
+    const a = [...(p.seasonal_overrides || [])]; a.splice(i, 1); return { ...p, seasonal_overrides: a };
+  });
+  const setOverrideField = (i: number, field: string, val: string) => setFormData(p => {
+    const a = [...(p.seasonal_overrides || [])];
+    if (!a[i]) a[i] = { season: { name: "", start: "", end: "" } };
+    if (field.startsWith("season.")) {
+      const sf = field.replace("season.", "");
+      a[i] = { ...a[i], season: { ...a[i].season!, [sf]: val } };
+    } else {
+      a[i] = { ...a[i], [field]: val };
+    }
+    return { ...p, seasonal_overrides: a };
+  });
 
-                                {/* Filters */}
-                                <div className="flex flex-wrap gap-3">
-                                    <div className="relative">
-                                        <select
-                                            value={statusFilter}
-                                            onChange={(e) => setStatusFilter(e.target.value)}
-                                            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[140px]"
-                                        >
-                                            <option value="all">All Status</option>
-                                            <option value="active">Active</option>
-                                            <option value="inactive">Inactive</option>
-                                        </select>
-                                        <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                    </div>
+  const addTax = () => setFormData(p => ({ ...p, taxes: [...(p.taxes || []), { code: "", rate: 0 }] }));
+  const removeTax = (i: number) => setFormData(p => { const a = [...(p.taxes || [])]; a.splice(i, 1); return { ...p, taxes: a }; });
+  const setTaxField = (i: number, field: "code" | "rate", val: string) => setFormData(p => {
+    const a = [...(p.taxes || [])];
+    a[i] = { ...a[i], [field]: field === "rate" ? parseFloat(val) || 0 : val };
+    return { ...p, taxes: a };
+  });
 
-                                    <div className="relative">
-                                        <select
-                                            value={branchFilter}
-                                            onChange={(e) => setBranchFilter(e.target.value)}
-                                            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[160px]"
-                                        >
-                                            <option value="all">All Branches</option>
-                                            {uniqueBranches.map((branch) => (
-                                                <option key={branch._id} value={branch._id}>
-                                                    {branch.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <Building className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                    </div>
+  const addFee = () => setFormData(p => ({ ...p, fees: [...(p.fees || []), { code: "", amount: "" }] }));
+  const removeFee = (i: number) => setFormData(p => { const a = [...(p.fees || [])]; a.splice(i, 1); return { ...p, fees: a }; });
+  const setFeeField = (i: number, field: "code" | "amount", val: string) => setFormData(p => {
+    const a = [...(p.fees || [])]; a[i] = { ...a[i], [field]: val }; return { ...p, fees: a };
+  });
 
-                                    <div className="relative">
-                                        <select
-                                            value={vehicleClassFilter}
-                                            onChange={(e) => setVehicleClassFilter(e.target.value)}
-                                            className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[160px]"
-                                        >
-                                            <option value="all">All Vehicle Classes</option>
-                                            {vehicleClasses.map((vehicleClass) => (
-                                                <option key={vehicleClass} value={vehicleClass}>
-                                                    {vehicleClass.charAt(0).toUpperCase() + vehicleClass.slice(1)}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <Car className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+  const fmtDate = (d?: string | null) => {
+    if (!d) return "N/A";
+    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+  const fmtCurrency = (amount: any, currency = "USD") => {
+    const n = typeof amount === "number" ? amount
+      : typeof amount === "string" ? parseFloat(amount)
+      : amount?.$numberDecimal ? parseFloat(amount.$numberDecimal) : 0;
+    return new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 2 }).format(n);
+  };
+  const getBranchName = (b: any) => {
+    if (!b) return "N/A";
+    if (typeof b === "string") return branches.find(x => x._id === b)?.name || b;
+    return b.name || b._id;
+  };
+  const getModelName = (id?: string | null | any) => {
+    if (!id) return "N/A";
+    if (typeof id === "object") return `${id.make || ""} ${id.model || ""} ${id.year || ""}`.trim() || "N/A";
+    const m = vehicleModels.find(m => m._id === id);
+    return m ? `${m.make} ${m.model} ${m.year}` : id;
+  };
+  const getUnitName = (u: any) => {
+    if (!u) return "N/A";
+    if (typeof u === "object") return `${u.vin || ""} (${u.plate_number || ""})`;
+    const unit = vehicleUnits.find(x => x._id === u);
+    return unit ? `${unit.vin} (${unit.plate_number})` : u;
+  };
+  const getPlanType = (plan: IRatePlan): RatePlanType =>
+    plan.vehicle_id ? "vehicle_unit" : plan.vehicle_model_id ? "vehicle_model" : "vehicle_class";
 
-                    {/* Rate Plans Grid/Table */}
-                    <div className="px-6 pb-6">
-                        {loading ? (
-                            <div className="flex justify-center items-center h-64">
-                                <div className="flex flex-col items-center">
-                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1EA2E4] mb-4"></div>
-                                    <p className="text-gray-600">Loading rate plans...</p>
-                                </div>
-                            </div>
-                        ) : error ? (
-                            <div className="flex flex-col items-center justify-center h-64 p-6">
-                                <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-                                <p className="text-red-600 text-center mb-4">{error}</p>
-                                <button
-                                    onClick={loadRatePlans}
-                                    className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors flex items-center gap-2"
-                                >
-                                    <RefreshCw className="w-4 h-4" />
-                                    Retry
-                                </button>
-                            </div>
-                        ) : filteredRatePlans.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-64 p-6">
-                                <Tag className="w-20 h-20 text-gray-300 mb-4" />
-                                <p className="text-gray-500 text-lg mb-2">No rate plans found</p>
-                                <p className="text-gray-400 text-center mb-6">
-                                    {searchTerm || statusFilter !== "all" || branchFilter !== "all" || vehicleClassFilter !== "all"
-                                        ? "Try adjusting your filters or search terms"
-                                        : "Get started by adding your first rate plan"}
-                                </p>
-                                {!searchTerm && statusFilter === "all" && branchFilter === "all" && vehicleClassFilter === "all" && (
-                                    <button
-                                        onClick={openAddModal}
-                                        className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors"
-                                    >
-                                        Add Rate Plan
-                                    </button>
-                                )}
-                            </div>
-                        ) : (
-                            <>
-                                {/* Desktop Grid */}
-                                <div className="hidden lg:block">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {filteredRatePlans.map((plan) => (
-                                            <div
-                                                key={plan._id}
-                                                className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
-                                            >
-                                                <div className="p-6">
-                                                    {/* Rate Plan Header */}
-                                                    <div className="flex justify-between items-start mb-4">
-                                                        <div>
-                                                            <div className="flex items-center gap-2 mb-2">
-                                                                <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
-                                                                <span
-                                                                    className={`px-2 py-1 text-xs font-medium rounded-full ${plan.active
-                                                                            ? "bg-green-100 text-green-800"
-                                                                            : "bg-red-100 text-red-800"
-                                                                        }`}
-                                                                >
-                                                                    {plan.active ? "ACTIVE" : "INACTIVE"}
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                                <Tag className="w-4 h-4" />
-                                                                <span className="font-medium">{plan.vehicle_class}</span>
-                                                                <span className="text-gray-400">•</span>
-                                                                <span className="font-mono">{plan.currency}</span>
-                                                            </div>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => openViewModal(plan)}
-                                                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                                        >
-                                                            <Eye className="w-5 h-5 text-gray-600" />
-                                                        </button>
-                                                    </div>
+  const filtered = ratePlans.filter(p => {
+    const ms = !searchTerm || p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.currency.toLowerCase().includes(searchTerm.toLowerCase());
+    const mst = statusFilter === "all" || (statusFilter === "active" && p.active) || (statusFilter === "inactive" && !p.active);
+    const mb = branchFilter === "all" || (typeof p.branch_id === "string" ? p.branch_id === branchFilter : p.branch_id?._id === branchFilter);
+    const mc = vehicleClassFilter === "all" || p.vehicle_class === vehicleClassFilter;
+    return ms && mst && mb && mc;
+  });
 
-                                                    {/* Rates */}
-                                                    <div className="mb-4">
-                                                        <div className="grid grid-cols-2 gap-3 mb-3">
-                                                            <div className="bg-gray-50 p-3 rounded-lg">
-                                                                <p className="text-xs text-gray-500">Daily Rate</p>
-                                                                <p className="text-lg font-bold text-gray-900">
-                                                                    {formatCurrency(plan.daily_rate, plan.currency)}
-                                                                </p>
-                                                            </div>
-                                                            <div className="bg-gray-50 p-3 rounded-lg">
-                                                                <p className="text-xs text-gray-500">Weekly Rate</p>
-                                                                <p className="text-lg font-bold text-gray-900">
-                                                                    {plan.weekly_rate ? formatCurrency(plan.weekly_rate, plan.currency) : "N/A"}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            <div className="bg-gray-50 p-3 rounded-lg">
-                                                                <p className="text-xs text-gray-500">Monthly Rate</p>
-                                                                <p className="text-lg font-bold text-gray-900">
-                                                                    {plan.monthly_rate ? formatCurrency(plan.monthly_rate, plan.currency) : "N/A"}
-                                                                </p>
-                                                            </div>
-                                                            <div className="bg-gray-50 p-3 rounded-lg">
-                                                                <p className="text-xs text-gray-500">Weekend Rate</p>
-                                                                <p className="text-lg font-bold text-gray-900">
-                                                                    {plan.weekend_rate ? formatCurrency(plan.weekend_rate, plan.currency) : "N/A"}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
+  const uniqueBranches = branches.filter(b => ratePlans.some(p =>
+    typeof p.branch_id === "string" ? p.branch_id === b._id : p.branch_id?._id === b._id
+  ));
 
-                                                    {/* Branch & Validity */}
-                                                    <div className="space-y-3 mb-6">
-                                                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                            <Building className="w-4 h-4" />
-                                                            <span className="truncate">{getBranchName(plan.branch_id)}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                            <Calendar className="w-4 h-4" />
-                                                            <span>
-                                                                {plan.valid_from ? formatDate(plan.valid_from) : "Always"}
-                                                                {plan.valid_to && ` - ${formatDate(plan.valid_to)}`}
-                                                            </span>
-                                                        </div>
-                                                    </div>
+  const stats = {
+    total: ratePlans.length,
+    active: ratePlans.filter(p => p.active).length,
+    withOverrides: ratePlans.filter(p => (p.seasonal_overrides?.length ?? 0) > 0).length,
+    currencies: [...new Set(ratePlans.map(p => p.currency))].length,
+  };
 
-                                                    {/* Actions */}
-                                                    <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                                                        <div className="text-xs text-gray-500">
-                                                            {plan.createdAt && (
-                                                                <div className="flex items-center gap-1">
-                                                                    <Calendar className="w-3 h-3" />
-                                                                    {formatDate(plan.createdAt)}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex gap-2">
-                                                            <button
-                                                                onClick={() => openEditModal(plan)}
-                                                                className="p-2 text-gray-600 hover:text-[#1EA2E4] hover:bg-[#1EA2E4]/10 rounded-lg transition-colors"
-                                                                title="Edit Rate Plan"
-                                                            >
-                                                                <Edit className="w-4 h-4" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setRatePlanToDelete(plan._id)}
-                                                                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                                title="Delete Rate Plan"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
+  const RateInput = ({ label, value, onChange, currency }: { label: string; value: string; onChange: (v: string) => void; currency: string }) => (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+          {currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$"}
+        </span>
+        <input
+          type="number" min="0" step="0.01" value={value}
+          onChange={e => onChange(e.target.value)}
+          className="w-full pl-7 pr-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] text-sm"
+          placeholder="0.00"
+        />
+      </div>
+    </div>
+  );
 
-                                {/* Mobile Cards */}
-                                <div className="lg:hidden space-y-4">
-                                    {filteredRatePlans.map((plan) => (
-                                        <div
-                                            key={plan._id}
-                                            className="bg-white rounded-xl border border-gray-200 shadow-sm p-4"
-                                        >
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                    <h3 className="font-bold text-gray-900">{plan.name}</h3>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                                                            {plan.vehicle_class}
-                                                        </span>
-                                                        <span
-                                                            className={`px-2 py-0.5 text-xs font-medium rounded-full ${plan.active
-                                                                    ? "bg-green-100 text-green-800"
-                                                                    : "bg-red-100 text-red-800"
-                                                                }`}
-                                                        >
-                                                            {plan.active ? "ACTIVE" : "INACTIVE"}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-1">
-                                                    <button
-                                                        onClick={() => openViewModal(plan)}
-                                                        className="p-1.5 hover:bg-gray-100 rounded-lg"
-                                                    >
-                                                        <Eye className="w-4 h-4 text-gray-600" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => openEditModal(plan)}
-                                                        className="p-1.5 hover:bg-gray-100 rounded-lg"
-                                                    >
-                                                        <Edit className="w-4 h-4 text-gray-600" />
-                                                    </button>
-                                                </div>
-                                            </div>
+  return (
+    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+      <ManagerSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-                                            <div className="space-y-3 mb-4">
-                                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                    <DollarSign className="w-4 h-4" />
-                                                    <span className="font-bold">{formatCurrency(plan.daily_rate, plan.currency)}</span>
-                                                    <span className="text-gray-400">/ day</span>
-                                                </div>
-
-                                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                    <Building className="w-4 h-4" />
-                                                    <span className="truncate">{getBranchName(plan.branch_id)}</span>
-                                                </div>
-
-                                                <div className="flex items-center gap-2 text-sm text-gray-600">
-                                                    <Calendar className="w-4 h-4" />
-                                                    <span className="text-xs">
-                                                        {plan.valid_from ? formatDate(plan.valid_from) : "Always valid"}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex justify-between items-center pt-3 border-t border-gray-100">
-                                                {plan.createdAt && (
-                                                    <div className="text-xs text-gray-500">
-                                                        {formatDate(plan.createdAt)}
-                                                    </div>
-                                                )}
-                                                <button
-                                                    onClick={() => setRatePlanToDelete(plan._id)}
-                                                    className="px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium"
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 rounded-lg hover:bg-gray-100">
+                <MoreVertical className="w-5 h-5 text-gray-600" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                  <TrendingUp className="w-6 h-6 text-[#1EA2E4]" /> Rate Plans
+                </h1>
+                <p className="text-sm text-gray-500">Manage pricing structures for vehicles</p>
+              </div>
             </div>
-
-            {/* View Rate Plan Details Modal */}
-            {isViewModalOpen && selectedRatePlan && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-                        onClick={() => setIsViewModalOpen(false)}
-                    />
-                    <div className="relative bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
-                        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                            <div>
-                                <h2 className="text-xl font-bold text-gray-800">Rate Plan Details</h2>
-                                <p className="text-sm text-gray-600">View rate plan information</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        setIsViewModalOpen(false);
-                                        openEditModal(selectedRatePlan);
-                                    }}
-                                    className="px-3 py-1.5 text-sm bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors"
-                                >
-                                    Edit
-                                </button>
-                                <button
-                                    onClick={() => setIsViewModalOpen(false)}
-                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                >
-                                    <X className="w-5 h-5 text-gray-600" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="overflow-y-auto p-6" style={{ maxHeight: "calc(90vh - 80px)" }}>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                {/* Left Column */}
-                                <div className="space-y-6">
-                                    {/* Basic Information */}
-                                    <div className="bg-gray-50 rounded-lg p-5">
-                                        <h4 className="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">
-                                            Basic Information
-                                        </h4>
-                                        <div className="space-y-4">
-                                            <div>
-                                                <p className="text-xs text-gray-500">Rate Plan Name</p>
-                                                <p className="text-lg font-bold text-gray-900">{selectedRatePlan.name}</p>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Status</p>
-                                                    <span
-                                                        className={`px-3 py-1 text-sm font-medium rounded-full ${selectedRatePlan.active
-                                                                ? "bg-green-100 text-green-800"
-                                                                : "bg-red-100 text-red-800"
-                                                            }`}
-                                                    >
-                                                        {selectedRatePlan.active ? "ACTIVE" : "INACTIVE"}
-                                                    </span>
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Currency</p>
-                                                    <p className="text-sm font-mono text-gray-900 bg-gray-100 px-3 py-1.5 rounded inline-block">
-                                                        {selectedRatePlan.currency}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            {selectedRatePlan.notes && (
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Notes</p>
-                                                    <p className="text-sm text-gray-700 mt-1">{selectedRatePlan.notes}</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Rates */}
-                                    <div className="bg-gray-50 rounded-lg p-5">
-                                        <h4 className="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">
-                                            Base Rates
-                                        </h4>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                                <p className="text-xs text-gray-500">Daily Rate</p>
-                                                <p className="text-xl font-bold text-gray-900">
-                                                    {formatCurrency(selectedRatePlan.daily_rate, selectedRatePlan.currency)}
-                                                </p>
-                                            </div>
-                                            <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                                <p className="text-xs text-gray-500">Weekly Rate</p>
-                                                <p className="text-xl font-bold text-gray-900">
-                                                    {selectedRatePlan.weekly_rate 
-                                                        ? formatCurrency(selectedRatePlan.weekly_rate, selectedRatePlan.currency)
-                                                        : "N/A"}
-                                                </p>
-                                            </div>
-                                            <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                                <p className="text-xs text-gray-500">Monthly Rate</p>
-                                                <p className="text-xl font-bold text-gray-900">
-                                                    {selectedRatePlan.monthly_rate 
-                                                        ? formatCurrency(selectedRatePlan.monthly_rate, selectedRatePlan.currency)
-                                                        : "N/A"}
-                                                </p>
-                                            </div>
-                                            <div className="bg-white p-4 rounded-lg border border-gray-200">
-                                                <p className="text-xs text-gray-500">Weekend Rate</p>
-                                                <p className="text-xl font-bold text-gray-900">
-                                                    {selectedRatePlan.weekend_rate 
-                                                        ? formatCurrency(selectedRatePlan.weekend_rate, selectedRatePlan.currency)
-                                                        : "N/A"}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Applicability */}
-                                    <div className="bg-gray-50 rounded-lg p-5">
-                                        <h4 className="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">
-                                            Applicability
-                                        </h4>
-                                        <div className="space-y-4">
-                                            <div>
-                                                <p className="text-xs text-gray-500">Branch</p>
-                                                <p className="text-gray-900 font-medium">{getBranchName(selectedRatePlan.branch_id)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-gray-500">Vehicle Class</p>
-                                                <p className="text-gray-900 font-medium">{selectedRatePlan.vehicle_class}</p>
-                                            </div>
-                                            {selectedRatePlan.vehicle_model_id && (
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Vehicle Model</p>
-                                                    <p className="text-gray-900 font-medium">{getVehicleModelName(selectedRatePlan.vehicle_model_id)}</p>
-                                                </div>
-                                            )}
-                                            {selectedRatePlan.vehicle_id && (
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Vehicle Unit</p>
-                                                    <p className="text-gray-900 font-medium">{getVehicleUnitName(selectedRatePlan.vehicle_id)}</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Right Column */}
-                                <div className="space-y-6">
-                                    {/* Validity Period */}
-                                    <div className="bg-gray-50 rounded-lg p-5">
-                                        <h4 className="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">
-                                            Validity Period
-                                        </h4>
-                                        <div className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Valid From</p>
-                                                    <p className="text-gray-900">
-                                                        {selectedRatePlan.valid_from ? formatDate(selectedRatePlan.valid_from) : "Immediately"}
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-gray-500">Valid To</p>
-                                                    <p className="text-gray-900">
-                                                        {selectedRatePlan.valid_to ? formatDate(selectedRatePlan.valid_to) : "No expiration"}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Seasonal Overrides */}
-                                    {selectedRatePlan.seasonal_overrides && selectedRatePlan.seasonal_overrides.length > 0 && (
-                                        <div className="bg-gray-50 rounded-lg p-5">
-                                            <h4 className="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">
-                                                Seasonal Overrides
-                                            </h4>
-                                            <div className="space-y-4">
-                                                {selectedRatePlan.seasonal_overrides.map((override, index) => (
-                                                    <div key={index} className="border border-gray-200 rounded-lg p-4 bg-white">
-                                                        <div className="flex justify-between items-start mb-2">
-                                                            <h5 className="font-medium text-gray-900">{override.season.name}</h5>
-                                                        </div>
-                                                        <div className="text-sm text-gray-600 mb-3">
-                                                            {formatDate(override.season.start)} - {formatDate(override.season.end)}
-                                                        </div>
-                                                        <div className="grid grid-cols-2 gap-3">
-                                                            {override.daily_rate && (
-                                                                <div>
-                                                                    <p className="text-xs text-gray-500">Daily Rate</p>
-                                                                    <p className="text-sm font-medium text-gray-900">
-                                                                        {formatCurrency(override.daily_rate, selectedRatePlan.currency)}
-                                                                    </p>
-                                                                </div>
-                                                            )}
-                                                            {override.weekly_rate && (
-                                                                <div>
-                                                                    <p className="text-xs text-gray-500">Weekly Rate</p>
-                                                                    <p className="text-sm font-medium text-gray-900">
-                                                                        {formatCurrency(override.weekly_rate, selectedRatePlan.currency)}
-                                                                    </p>
-                                                                </div>
-                                                            )}
-                                                            {override.monthly_rate && (
-                                                                <div>
-                                                                    <p className="text-xs text-gray-500">Monthly Rate</p>
-                                                                    <p className="text-sm font-medium text-gray-900">
-                                                                        {formatCurrency(override.monthly_rate, selectedRatePlan.currency)}
-                                                                    </p>
-                                                                </div>
-                                                            )}
-                                                            {override.weekend_rate && (
-                                                                <div>
-                                                                    <p className="text-xs text-gray-500">Weekend Rate</p>
-                                                                    <p className="text-sm font-medium text-gray-900">
-                                                                        {formatCurrency(override.weekend_rate, selectedRatePlan.currency)}
-                                                                    </p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Taxes */}
-                                    {selectedRatePlan.taxes && selectedRatePlan.taxes.length > 0 && (
-                                        <div className="bg-gray-50 rounded-lg p-5">
-                                            <h4 className="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">
-                                                Taxes
-                                            </h4>
-                                            <div className="space-y-3">
-                                                {selectedRatePlan.taxes.map((tax, index) => (
-                                                    <div key={index} className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200">
-                                                        <div>
-                                                            <p className="font-medium text-gray-900">{tax.code}</p>
-                                                        </div>
-                                                        <span className="text-sm font-medium text-gray-700">{tax.rate}%</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Fees */}
-                                    {selectedRatePlan.fees && selectedRatePlan.fees.length > 0 && (
-                                        <div className="bg-gray-50 rounded-lg p-5">
-                                            <h4 className="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">
-                                                Fees
-                                            </h4>
-                                            <div className="space-y-3">
-                                                {selectedRatePlan.fees.map((fee, index) => (
-                                                    <div key={index} className="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200">
-                                                        <div>
-                                                            <p className="font-medium text-gray-900">{fee.code}</p>
-                                                        </div>
-                                                        <span className="text-sm font-medium text-gray-700">
-                                                            {formatCurrency(fee.amount, selectedRatePlan.currency)}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Meta Information */}
-                                    <div className="bg-gray-50 rounded-lg p-5">
-                                        <h4 className="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">
-                                            Meta Information
-                                        </h4>
-                                        <div className="space-y-3">
-                                            <div>
-                                                <p className="text-xs text-gray-500">Rate Plan ID</p>
-                                                <p className="text-xs font-mono text-gray-600 break-all">
-                                                    {selectedRatePlan._id}
-                                                </p>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                {selectedRatePlan.createdAt && (
-                                                    <div>
-                                                        <p className="text-xs text-gray-500">Created</p>
-                                                        <p className="text-sm text-gray-900">{formatDate(selectedRatePlan.createdAt)}</p>
-                                                    </div>
-                                                )}
-                                                {selectedRatePlan.updatedAt && (
-                                                    <div>
-                                                        <p className="text-xs text-gray-500">Last Updated</p>
-                                                        <p className="text-sm text-gray-900">{formatDate(selectedRatePlan.updatedAt)}</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="border-t border-gray-200 bg-gray-50 px-6 py-4">
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={() => setIsViewModalOpen(false)}
-                                    className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                >
-                                    Close
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Add/Edit Rate Plan Modal */}
-            {(isAddModalOpen || isEditModalOpen) && (
-                <div
-                    className={`fixed inset-0 z-50 overflow-hidden transition-all duration-300 ease-in-out ${isAddModalOpen || isEditModalOpen
-                            ? "opacity-100 pointer-events-auto"
-                            : "opacity-0 pointer-events-none"
-                        }`}
-                >
-                    {/* Backdrop */}
-                    <div
-                        className={`absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ${isAddModalOpen || isEditModalOpen ? "opacity-100" : "opacity-0"
-                            }`}
-                        onClick={() => {
-                            setIsAddModalOpen(false);
-                            setIsEditModalOpen(false);
-                        }}
-                    />
-
-                    {/* Side Panel - Widened for better UX */}
-                    <div
-                        className={`absolute inset-y-0 right-0 flex max-w-full transition-transform duration-300 ease-in-out ${isAddModalOpen || isEditModalOpen ? "translate-x-0" : "translate-x-full"
-                            }`}
-                    >
-                        <div className="relative w-screen max-w-5xl">
-                            <div className="flex flex-col h-full bg-white shadow-xl">
-                                {/* Header */}
-                                <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-8 py-5">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <h2 className="text-2xl font-bold text-gray-800">
-                                                {isEditModalOpen ? "Edit Rate Plan" : "Add New Rate Plan"}
-                                            </h2>
-                                            <p className="text-sm text-gray-600">
-                                                {isEditModalOpen
-                                                    ? "Update rate plan information"
-                                                    : "Create a new rate plan"}
-                                            </p>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                setIsAddModalOpen(false);
-                                                setIsEditModalOpen(false);
-                                            }}
-                                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                        >
-                                            <X className="w-5 h-5 text-gray-600" />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Form Content */}
-                                <div className="flex-1 overflow-y-auto px-8 py-6">
-                                    <div className="space-y-8">
-                                        {/* Basic Information */}
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                                                Basic Information
-                                            </h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Rate Plan Name <span className="text-red-500">*</span>
-                                                    </label>
-                                                    <input
-                                                        type="text"
-                                                        value={formData.name}
-                                                        onChange={(e) =>
-                                                            setFormData((prev) => ({ ...prev, name: e.target.value }))
-                                                        }
-                                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                        placeholder="Summer Special Rate"
-                                                        required
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Currency <span className="text-red-500">*</span>
-                                                    </label>
-                                                    <select
-                                                        value={formData.currency}
-                                                        onChange={(e) =>
-                                                            setFormData((prev) => ({ ...prev, currency: e.target.value }))
-                                                        }
-                                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    >
-                                                        <option value="USD">USD ($)</option>
-                                                        <option value="EUR">EUR (€)</option>
-                                                        <option value="GBP">GBP (£)</option>
-                                                        <option value="CAD">CAD ($)</option>
-                                                        <option value="AUD">AUD ($)</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div className="mt-4">
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Notes
-                                                </label>
-                                                <textarea
-                                                    value={formData.notes}
-                                                    onChange={(e) =>
-                                                        setFormData((prev) => ({ ...prev, notes: e.target.value }))
-                                                    }
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    placeholder="Additional information about this rate plan"
-                                                    rows={3}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Branch Selection */}
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                                                Branch
-                                            </h3>
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Select Branch <span className="text-red-500">*</span>
-                                                </label>
-                                                <select
-                                                    value={formData.branch_id}
-                                                    onChange={(e) =>
-                                                        setFormData((prev) => ({ ...prev, branch_id: e.target.value }))
-                                                    }
-                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    required
-                                                >
-                                                    <option value="">Select a branch</option>
-                                                    {branches.map((branch) => (
-                                                        <option key={branch._id} value={branch._id}>
-                                                            {branch.name} - {branch.code}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        {/* Applicability Type */}
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                                                Applicability Type
-                                            </h3>
-                                            <div className="grid grid-cols-3 gap-4">
-                                                {ratePlanTypes.map((type) => (
-                                                    <button
-                                                        key={type}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setSelectedRatePlanType(type);
-                                                            // Clear other fields when changing type
-                                                            setFormData((prev) => ({
-                                                                ...prev,
-                                                                vehicle_class: type === "vehicle_class" ? prev.vehicle_class : "",
-                                                                vehicle_model_id: type === "vehicle_model" ? prev.vehicle_model_id : null,
-                                                                vehicle_id: type === "vehicle_unit" ? prev.vehicle_id : null,
-                                                            }));
-                                                        }}
-                                                        className={`p-4 border rounded-lg transition-all ${selectedRatePlanType === type
-                                                                ? "border-[#1EA2E4] bg-[#1EA2E4]/10"
-                                                                : "border-gray-300 hover:border-gray-400"
-                                                            }`}
-                                                    >
-                                                        <div className="flex flex-col items-center gap-2">
-                                                            {type === "vehicle_class" && (
-                                                                <Layers className="w-6 h-6 text-gray-600" />
-                                                            )}
-                                                            {type === "vehicle_model" && (
-                                                                <Car className="w-6 h-6 text-gray-600" />
-                                                            )}
-                                                            {type === "vehicle_unit" && (
-                                                                <Package className="w-6 h-6 text-gray-600" />
-                                                            )}
-                                                            <span className="text-sm font-medium capitalize">
-                                                                {type.replace("_", " ")}
-                                                            </span>
-                                                        </div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Applicability Selection */}
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                                                Applicability
-                                            </h3>
-                                            {selectedRatePlanType === "vehicle_class" && (
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Vehicle Class <span className="text-red-500">*</span>
-                                                    </label>
-                                                    <select
-                                                        value={formData.vehicle_class}
-                                                        onChange={(e) =>
-                                                            setFormData((prev) => ({ ...prev, vehicle_class: e.target.value }))
-                                                        }
-                                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    >
-                                                        {vehicleClasses.map((vehicleClass) => (
-                                                            <option key={vehicleClass} value={vehicleClass}>
-                                                                {vehicleClass.charAt(0).toUpperCase() + vehicleClass.slice(1)}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-
-                                            {selectedRatePlanType === "vehicle_model" && (
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Vehicle Model <span className="text-red-500">*</span>
-                                                    </label>
-                                                    <select
-                                                        value={formData.vehicle_model_id || ""}
-                                                        onChange={(e) =>
-                                                            setFormData((prev) => ({ ...prev, vehicle_model_id: e.target.value }))
-                                                        }
-                                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    >
-                                                        <option value="">Select a vehicle model</option>
-                                                        {vehicleModels.map((model) => (
-                                                            <option key={model._id} value={model._id}>
-                                                                {model.make} {model.model} {model.year} ({model.class})
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-
-                                            {selectedRatePlanType === "vehicle_unit" && (
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Vehicle Unit <span className="text-red-500">*</span>
-                                                    </label>
-                                                    <select
-                                                        value={formData.vehicle_id || ""}
-                                                        onChange={(e) =>
-                                                            setFormData((prev) => ({ ...prev, vehicle_id: e.target.value }))
-                                                        }
-                                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    >
-                                                        <option value="">Select a vehicle unit</option>
-                                                        {vehicleUnits.map((unit) => (
-                                                            <option key={unit._id} value={unit._id}>
-                                                                {unit.vin} - {unit.plate_number}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Base Rates */}
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                                                Base Rates
-                                            </h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Daily Rate <span className="text-red-500">*</span>
-                                                    </label>
-                                                    <div className="relative">
-                                                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
-                                                            {formData.currency === 'USD' ? '$' : 
-                                                             formData.currency === 'EUR' ? '€' : 
-                                                             formData.currency === 'GBP' ? '£' : '$'}
-                                                        </span>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            value={formData.daily_rate}
-                                                            onChange={(e) =>
-                                                                setFormData((prev) => ({ ...prev, daily_rate: e.target.value }))
-                                                            }
-                                                            className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                            placeholder="0.00"
-                                                            required
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Weekly Rate
-                                                    </label>
-                                                    <div className="relative">
-                                                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
-                                                            {formData.currency === 'USD' ? '$' : 
-                                                             formData.currency === 'EUR' ? '€' : 
-                                                             formData.currency === 'GBP' ? '£' : '$'}
-                                                        </span>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            value={formData.weekly_rate}
-                                                            onChange={(e) =>
-                                                                setFormData((prev) => ({ ...prev, weekly_rate: e.target.value }))
-                                                            }
-                                                            className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                            placeholder="Optional"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Monthly Rate
-                                                    </label>
-                                                    <div className="relative">
-                                                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
-                                                            {formData.currency === 'USD' ? '$' : 
-                                                             formData.currency === 'EUR' ? '€' : 
-                                                             formData.currency === 'GBP' ? '£' : '$'}
-                                                        </span>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            value={formData.monthly_rate}
-                                                            onChange={(e) =>
-                                                                setFormData((prev) => ({ ...prev, monthly_rate: e.target.value }))
-                                                            }
-                                                            className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                            placeholder="Optional"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Weekend Rate
-                                                    </label>
-                                                    <div className="relative">
-                                                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
-                                                            {formData.currency === 'USD' ? '$' : 
-                                                             formData.currency === 'EUR' ? '€' : 
-                                                             formData.currency === 'GBP' ? '£' : '$'}
-                                                        </span>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            value={formData.weekend_rate}
-                                                            onChange={(e) =>
-                                                                setFormData((prev) => ({ ...prev, weekend_rate: e.target.value }))
-                                                            }
-                                                            className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                            placeholder="Optional"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Validity Period */}
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                                                Validity Period
-                                            </h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Valid From
-                                                    </label>
-                                                    <input
-                                                        type="date"
-                                                        value={formData.valid_from}
-                                                        onChange={(e) =>
-                                                            setFormData((prev) => ({ ...prev, valid_from: e.target.value }))
-                                                        }
-                                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                        Valid To (Optional)
-                                                    </label>
-                                                    <input
-                                                        type="date"
-                                                        value={formData.valid_to || ""}
-                                                        onChange={(e) =>
-                                                            setFormData((prev) => ({ ...prev, valid_to: e.target.value || null }))
-                                                        }
-                                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Seasonal Overrides */}
-                                        <div>
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h3 className="text-lg font-semibold text-gray-800">
-                                                    Seasonal Overrides
-                                                </h3>
-                                                <button
-                                                    type="button"
-                                                    onClick={addSeasonalOverride}
-                                                    className="text-sm text-[#1EA2E4] hover:text-[#1A8BC9] font-medium flex items-center gap-1"
-                                                >
-                                                    <Plus className="w-4 h-4" />
-                                                    Add Override
-                                                </button>
-                                            </div>
-                                            {formData.seasonal_overrides?.map((override, index) => (
-                                                <div key={index} className="border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50">
-                                                    <div className="flex justify-between items-start mb-4">
-                                                        <h4 className="font-medium text-gray-700">Seasonal Override #{index + 1}</h4>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeSeasonalOverride(index)}
-                                                            className="text-red-600 hover:text-red-800"
-                                                        >
-                                                            <XCircle className="w-5 h-5" />
-                                                        </button>
-                                                    </div>
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                                        <div>
-                                                            <label className="block text-xs text-gray-500 mb-1">
-                                                                Season Name
-                                                            </label>
-                                                            <input
-                                                                type="text"
-                                                                value={override.season.name}
-                                                                onChange={(e) =>
-                                                                    handleSeasonalOverrideChange(index, 'season', `name.${e.target.value}`)
-                                                                }
-                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                                placeholder="Summer, Winter, etc."
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs text-gray-500 mb-1">
-                                                                Start Date
-                                                            </label>
-                                                            <input
-                                                                type="date"
-                                                                value={override.season.start}
-                                                                onChange={(e) =>
-                                                                    handleSeasonalOverrideChange(index, 'season', `start.${e.target.value}`)
-                                                                }
-                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs text-gray-500 mb-1">
-                                                                End Date
-                                                            </label>
-                                                            <input
-                                                                type="date"
-                                                                value={override.season.end}
-                                                                onChange={(e) =>
-                                                                    handleSeasonalOverrideChange(index, 'season', `end.${e.target.value}`)
-                                                                }
-                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                        <div>
-                                                            <label className="block text-xs text-gray-500 mb-1">
-                                                                Daily Rate
-                                                            </label>
-                                                            <input
-                                                                type="number"
-                                                                step="0.01"
-                                                                min="0"
-                                                                value={override.daily_rate || ""}
-                                                                onChange={(e) =>
-                                                                    handleSeasonalOverrideChange(index, 'daily_rate', e.target.value)
-                                                                }
-                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                                placeholder="Override"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs text-gray-500 mb-1">
-                                                                Weekly Rate
-                                                            </label>
-                                                            <input
-                                                                type="number"
-                                                                step="0.01"
-                                                                min="0"
-                                                                value={override.weekly_rate || ""}
-                                                                onChange={(e) =>
-                                                                    handleSeasonalOverrideChange(index, 'weekly_rate', e.target.value)
-                                                                }
-                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                                placeholder="Override"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs text-gray-500 mb-1">
-                                                                Monthly Rate
-                                                            </label>
-                                                            <input
-                                                                type="number"
-                                                                step="0.01"
-                                                                min="0"
-                                                                value={override.monthly_rate || ""}
-                                                                onChange={(e) =>
-                                                                    handleSeasonalOverrideChange(index, 'monthly_rate', e.target.value)
-                                                                }
-                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                                placeholder="Override"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-xs text-gray-500 mb-1">
-                                                                Weekend Rate
-                                                            </label>
-                                                            <input
-                                                                type="number"
-                                                                step="0.01"
-                                                                min="0"
-                                                                value={override.weekend_rate || ""}
-                                                                onChange={(e) =>
-                                                                    handleSeasonalOverrideChange(index, 'weekend_rate', e.target.value)
-                                                                }
-                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                                placeholder="Override"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            {(!formData.seasonal_overrides || formData.seasonal_overrides.length === 0) && (
-                                                <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
-                                                    <Tag className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                                                    <p className="text-gray-500">No seasonal overrides added</p>
-                                                    <p className="text-sm text-gray-400 mt-1">Click "Add Override" to add seasonal pricing</p>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Taxes */}
-                                        <div>
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h3 className="text-lg font-semibold text-gray-800">
-                                                    Taxes
-                                                </h3>
-                                                <button
-                                                    type="button"
-                                                    onClick={addTax}
-                                                    className="text-sm text-[#1EA2E4] hover:text-[#1A8BC9] font-medium flex items-center gap-1"
-                                                >
-                                                    <Plus className="w-4 h-4" />
-                                                    Add Tax
-                                                </button>
-                                            </div>
-                                            {formData.taxes?.map((tax, index) => (
-                                                <div key={index} className="flex items-center gap-4 mb-3">
-                                                    <div className="flex-1">
-                                                        <input
-                                                            type="text"
-                                                            value={tax.code}
-                                                            onChange={(e) =>
-                                                                handleTaxChange(index, 'code', e.target.value)
-                                                            }
-                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                            placeholder="Tax code (e.g., VAT, GST)"
-                                                        />
-                                                    </div>
-                                                    <div className="relative w-32">
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            max="100"
-                                                            value={tax.rate}
-                                                            onChange={(e) =>
-                                                                handleTaxChange(index, 'rate', e.target.value)
-                                                            }
-                                                            className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                            placeholder="Rate"
-                                                        />
-                                                        <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500">%</span>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeTax(index)}
-                                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                                    >
-                                                        <XCircle className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                            {(!formData.taxes || formData.taxes.length === 0) && (
-                                                <div className="text-center py-4 border-2 border-dashed border-gray-300 rounded-lg">
-                                                    <p className="text-gray-500">No taxes added</p>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Fees */}
-                                        <div>
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h3 className="text-lg font-semibold text-gray-800">
-                                                    Fees
-                                                </h3>
-                                                <button
-                                                    type="button"
-                                                    onClick={addFee}
-                                                    className="text-sm text-[#1EA2E4] hover:text-[#1A8BC9] font-medium flex items-center gap-1"
-                                                >
-                                                    <Plus className="w-4 h-4" />
-                                                    Add Fee
-                                                </button>
-                                            </div>
-                                            {formData.fees?.map((fee, index) => (
-                                                <div key={index} className="flex items-center gap-4 mb-3">
-                                                    <div className="flex-1">
-                                                        <input
-                                                            type="text"
-                                                            value={fee.code}
-                                                            onChange={(e) =>
-                                                                handleFeeChange(index, 'code', e.target.value)
-                                                            }
-                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                            placeholder="Fee code (e.g., Cleaning, Airport)"
-                                                        />
-                                                    </div>
-                                                    <div className="relative w-48">
-                                                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
-                                                            {formData.currency === 'USD' ? '$' : 
-                                                             formData.currency === 'EUR' ? '€' : 
-                                                             formData.currency === 'GBP' ? '£' : '$'}
-                                                        </span>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            value={fee.amount}
-                                                            onChange={(e) =>
-                                                                handleFeeChange(index, 'amount', e.target.value)
-                                                            }
-                                                            className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1EA2E4]"
-                                                            placeholder="Amount"
-                                                        />
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeFee(index)}
-                                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                                    >
-                                                        <XCircle className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                            {(!formData.fees || formData.fees.length === 0) && (
-                                                <div className="text-center py-4 border-2 border-dashed border-gray-300 rounded-lg">
-                                                    <p className="text-gray-500">No fees added</p>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Status */}
-                                        <div>
-                                            <h3 className="text-lg font-semibold text-gray-800 mb-4">Status</h3>
-                                            <div className="flex items-center gap-3">
-                                                <label className="relative inline-flex items-center cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={formData.active}
-                                                        onChange={(e) =>
-                                                            setFormData((prev) => ({ ...prev, active: e.target.checked }))
-                                                        }
-                                                        className="sr-only peer"
-                                                    />
-                                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#1EA2E4]"></div>
-                                                    <span className="ml-3 text-sm font-medium text-gray-700">
-                                                        {formData.active ? "Active" : "Inactive"}
-                                                    </span>
-                                                </label>
-                                                <span className="text-sm text-gray-500">
-                                                    {formData.active
-                                                        ? "This rate plan is active and available"
-                                                        : "This rate plan is inactive and hidden"}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Footer */}
-                                <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-8 py-5">
-                                    <div className="flex justify-end gap-3">
-                                        <button
-                                            onClick={() => {
-                                                setIsAddModalOpen(false);
-                                                setIsEditModalOpen(false);
-                                            }}
-                                            className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={isEditModalOpen ? handleUpdateRatePlan : handleAddRatePlan}
-                                            disabled={!formData.name || !formData.branch_id || !formData.daily_rate}
-                                            className="px-5 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                        >
-                                            <Save className="w-4 h-4" />
-                                            {isEditModalOpen ? "Update Rate Plan" : "Create Rate Plan"}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Delete Confirmation Modal */}
-            {ratePlanToDelete && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div
-                        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-                        onClick={() => setRatePlanToDelete(null)}
-                    />
-                    <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
-                        <div className="p-6">
-                            <div className="flex items-center mb-4">
-                                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mr-4">
-                                    <AlertCircle className="w-6 h-6 text-red-600" />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-bold text-gray-900">Delete Rate Plan</h3>
-                                    <p className="text-sm text-gray-600">This action cannot be undone</p>
-                                </div>
-                            </div>
-
-                            <p className="text-gray-600 mb-6">
-                                Are you sure you want to delete this rate plan? This will remove all rate plan
-                                information and cannot be recovered.
-                            </p>
-
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    onClick={() => setRatePlanToDelete(null)}
-                                    className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={() => handleDeleteRatePlan(ratePlanToDelete)}
-                                    className="px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                                >
-                                    Delete Rate Plan
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Snackbar */}
-            {snackbar.show && (
-                <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom duration-300">
-                    <div
-                        className={`px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px] ${snackbar.type === "success"
-                                ? "bg-green-50 border border-green-200 text-green-800"
-                                : snackbar.type === "error"
-                                    ? "bg-red-50 border border-red-200 text-red-800"
-                                    : "bg-blue-50 border border-blue-200 text-blue-800"
-                            }`}
-                    >
-                        {snackbar.type === "success" && (
-                            <CheckCircle className="w-5 h-5 flex-shrink-0" />
-                        )}
-                        {snackbar.type === "error" && (
-                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                        )}
-                        <span className="text-sm font-medium flex-1">{snackbar.message}</span>
-                        <button
-                            onClick={() => setSnackbar((prev) => ({ ...prev, show: false }))}
-                            className="text-gray-400 hover:text-gray-600"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-                    </div>
-                </div>
-            )}
+            <div className="flex items-center gap-3">
+              <button onClick={loadAll} className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600">
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={openAdd}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[#1EA2E4] to-[#0d7fc4] text-white rounded-xl font-semibold shadow-md hover:opacity-90 transition-all"
+              >
+                <Plus className="w-5 h-5" /> New Rate Plan
+              </button>
+            </div>
+          </div>
         </div>
-    );
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Stats */}
+          <div className="px-6 pt-5 pb-2">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { label: "Total Plans", val: stats.total, icon: Tag, color: "text-blue-600", bg: "bg-blue-50" },
+                { label: "Active", val: stats.active, icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50" },
+                { label: "Seasonal Plans", val: stats.withOverrides, icon: Calendar, color: "text-amber-600", bg: "bg-amber-50" },
+                { label: "Currencies", val: stats.currencies, icon: Globe, color: "text-violet-600", bg: "bg-violet-50" },
+              ].map(s => (
+                <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center flex-shrink-0`}>
+                    <s.icon className={`w-5 h-5 ${s.color}`} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">{s.label}</p>
+                    <p className={`text-xl font-bold ${s.color}`}>{s.val}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="px-6 py-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col lg:flex-row gap-3">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text" placeholder="Search by name, currency, notes..."
+                  value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] text-sm"
+                />
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {[
+                  { val: "all", label: "All" }, { val: "active", label: "Active" }, { val: "inactive", label: "Inactive" },
+                ].map(f => (
+                  <button key={f.val} onClick={() => setStatusFilter(f.val)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${statusFilter === f.val ? "bg-[#1EA2E4] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                    {f.label}
+                  </button>
+                ))}
+                <div className="h-6 w-px bg-gray-200 self-center" />
+                <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]">
+                  <option value="all">All Branches</option>
+                  {uniqueBranches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                </select>
+                <select value={vehicleClassFilter} onChange={e => setVehicleClassFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]">
+                  <option value="all">All Classes</option>
+                  {vehicleClasses.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards */}
+          <div className="px-6 pb-8">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1EA2E4] mb-4" />
+                <p className="text-gray-500">Loading rate plans...</p>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center h-64">
+                <AlertCircle className="w-12 h-12 text-red-400 mb-3" />
+                <p className="text-red-600 mb-4">{error}</p>
+                <button onClick={loadAll} className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg flex items-center gap-2 text-sm">
+                  <RefreshCw className="w-4 h-4" /> Retry
+                </button>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64">
+                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-4">
+                  <TrendingUp className="w-10 h-10 text-gray-300" />
+                </div>
+                <p className="text-gray-600 font-semibold mb-1">No rate plans found</p>
+                <p className="text-gray-400 text-sm mb-5">
+                  {searchTerm || statusFilter !== "all" || branchFilter !== "all" || vehicleClassFilter !== "all"
+                    ? "Try adjusting your filters" : "Create your first rate plan"}
+                </p>
+                {!searchTerm && statusFilter === "all" && branchFilter === "all" && vehicleClassFilter === "all" && (
+                  <button onClick={openAdd} className="px-5 py-2.5 bg-gradient-to-r from-[#1EA2E4] to-[#0d7fc4] text-white rounded-xl font-semibold shadow-md hover:opacity-90">
+                    + New Rate Plan
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {filtered.map(plan => {
+                  const pType = getPlanType(plan);
+                  const meta = TYPE_META[pType];
+                  const TypeIcon = meta.icon;
+                  const dailyNum = parseFloat(normalizeDecimal(plan.daily_rate) || "0");
+                  const hasWeekly = plan.weekly_rate && parseFloat(normalizeDecimal(plan.weekly_rate) || "0") > 0;
+                  const hasMonthly = plan.monthly_rate && parseFloat(normalizeDecimal(plan.monthly_rate) || "0") > 0;
+                  const hasWeekend = plan.weekend_rate && parseFloat(normalizeDecimal(plan.weekend_rate) || "0") > 0;
+
+                  const accentColor = pType === "vehicle_class" ? "#2563eb" : pType === "vehicle_model" ? "#059669" : "#7c3aed";
+
+                  return (
+                    <div key={plan._id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col overflow-hidden">
+                      {/* Accent top bar */}
+                      <div className="h-1 w-full" style={{ backgroundColor: accentColor }} />
+
+                      {/* Header */}
+                      <div className="px-5 pt-4 pb-3">
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs font-medium" style={{ color: accentColor, borderColor: `${accentColor}30`, backgroundColor: `${accentColor}08` }}>
+                            <TypeIcon className="w-3 h-3" />
+                            {meta.label}
+                          </div>
+                          <span className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md ${plan.active ? "text-emerald-700 bg-emerald-50" : "text-gray-500 bg-gray-100"}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${plan.active ? "bg-emerald-500" : "bg-gray-400"}`} />
+                            {plan.active ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+
+                        <h3 className="font-bold text-gray-900 text-base leading-snug truncate mb-0.5">{plan.name}</h3>
+                        <p className="text-xs text-gray-400 truncate flex items-center gap-1">
+                          <Building2 className="w-3 h-3 flex-shrink-0" />
+                          {getBranchName(plan.branch_id)}
+                          <span className="mx-1">·</span>
+                          {plan.currency}
+                        </p>
+                      </div>
+
+                      {/* Rate section */}
+                      <div className="mx-5 mb-3 rounded-xl bg-gray-50 border border-gray-100 px-4 py-3">
+                        <div className="flex items-end justify-between">
+                          <div>
+                            <p className="text-xs text-gray-400 mb-0.5">Daily Rate</p>
+                            <p className="text-2xl font-bold text-gray-900">{fmtCurrency(dailyNum, plan.currency)}</p>
+                          </div>
+                          <p className="text-xs text-gray-400 mb-1">per day</p>
+                        </div>
+
+                        {(hasWeekly || hasMonthly || hasWeekend) && (
+                          <div className="mt-2 pt-2 border-t border-gray-200 grid grid-cols-3 gap-2">
+                            {[
+                              { label: "Weekly", val: plan.weekly_rate, show: hasWeekly },
+                              { label: "Monthly", val: plan.monthly_rate, show: hasMonthly },
+                              { label: "Weekend", val: plan.weekend_rate, show: hasWeekend },
+                            ].map(r => r.show ? (
+                              <div key={r.label}>
+                                <p className="text-xs text-gray-400">{r.label}</p>
+                                <p className="text-sm font-semibold text-gray-700">{fmtCurrency(r.val, plan.currency)}</p>
+                              </div>
+                            ) : null)}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Details */}
+                      <div className="px-5 pb-4 flex-1 flex flex-col">
+                        <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+                          <TypeIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                          <span className="font-medium capitalize">
+                            {pType === "vehicle_class" ? plan.vehicle_class
+                              : pType === "vehicle_model" ? getModelName(plan.vehicle_model_id)
+                              : getUnitName(plan.vehicle_id)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
+                          <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                          <span>
+                            {plan.valid_from ? fmtDate(plan.valid_from) : "Now"}
+                            {" – "}
+                            {plan.valid_to ? fmtDate(plan.valid_to) : "No expiry"}
+                          </span>
+                        </div>
+
+                        {((plan.seasonal_overrides?.length ?? 0) > 0 || (plan.taxes?.length ?? 0) > 0 || (plan.fees?.length ?? 0) > 0) && (
+                          <div className="flex flex-wrap gap-1 mb-3">
+                            {(plan.seasonal_overrides?.length ?? 0) > 0 && (
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">{plan.seasonal_overrides!.length} season{plan.seasonal_overrides!.length !== 1 ? "s" : ""}</span>
+                            )}
+                            {(plan.taxes?.length ?? 0) > 0 && (
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">{plan.taxes!.length} tax{plan.taxes!.length !== 1 ? "es" : ""}</span>
+                            )}
+                            {(plan.fees?.length ?? 0) > 0 && (
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">{plan.fees!.length} fee{plan.fees!.length !== 1 ? "s" : ""}</span>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="mt-auto pt-3 border-t border-gray-100 flex items-center gap-2">
+                          <button onClick={() => navigate(`/manager/rate-plan/${plan._id}`)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-medium transition-colors">
+                            <Eye className="w-3.5 h-3.5" /> View
+                          </button>
+                          <button onClick={() => openEdit(plan)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-medium transition-colors">
+                            <Edit className="w-3.5 h-3.5" /> Edit
+                          </button>
+                          <button onClick={() => setDeleteTarget(plan._id)}
+                            className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── VIEW MODAL REMOVED — detail page used instead ── */}
+      {false && selectedPlan && (() => {
+        const pType = getPlanType(selectedPlan);
+        const meta = TYPE_META[pType];
+        const TypeIcon = meta.icon;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsViewOpen(false)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+              <div className={`bg-gradient-to-br ${meta.gradient} px-6 py-5`}>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="bg-white/20 px-2.5 py-1 rounded-full flex items-center gap-1.5">
+                        <TypeIcon className="w-3.5 h-3.5 text-white" />
+                        <span className="text-white text-xs font-semibold">{meta.label}</span>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${selectedPlan.active ? "bg-emerald-400/30 text-white" : "bg-black/20 text-white/70"}`}>
+                        {selectedPlan.active ? "ACTIVE" : "INACTIVE"}
+                      </span>
+                    </div>
+                    <h2 className="text-2xl font-bold text-white mb-0.5">{selectedPlan.name}</h2>
+                    <p className="text-white/70 text-sm">{getBranchName(selectedPlan.branch_id)} · {selectedPlan.currency}</p>
+                    <div className="mt-4 flex items-end gap-1">
+                      <span className="text-5xl font-black text-white">{fmtCurrency(selectedPlan.daily_rate, selectedPlan.currency)}</span>
+                      <span className="text-white/60 text-lg mb-1">/day</span>
+                    </div>
+                  </div>
+                  <button onClick={() => setIsViewOpen(false)} className="p-2 bg-white/20 hover:bg-white/30 rounded-lg ml-4">
+                    <X className="w-5 h-5 text-white" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Weekly", val: selectedPlan.weekly_rate },
+                    { label: "Monthly", val: selectedPlan.monthly_rate },
+                    { label: "Weekend", val: selectedPlan.weekend_rate },
+                  ].map(r => (
+                    <div key={r.label} className="bg-gray-50 rounded-xl p-4 text-center border border-gray-200">
+                      <p className="text-xs text-gray-500 mb-1">{r.label}</p>
+                      <p className="text-lg font-bold text-gray-800">
+                        {r.val ? fmtCurrency(r.val, selectedPlan.currency) : <span className="text-gray-300">—</span>}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Vehicle Target</p>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${meta.gradient} flex items-center justify-center`}>
+                      <TypeIcon className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">{meta.label}</p>
+                      <p className="font-semibold text-gray-800 capitalize">
+                        {pType === "vehicle_class" ? selectedPlan.vehicle_class
+                          : pType === "vehicle_model" ? getModelName(selectedPlan.vehicle_model_id as string)
+                          : getUnitName(selectedPlan.vehicle_id)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Validity</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Valid From</p>
+                      <p className="font-semibold text-gray-800">{selectedPlan.valid_from ? fmtDate(selectedPlan.valid_from) : "Immediately"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Valid To</p>
+                      <p className="font-semibold text-gray-800">{selectedPlan.valid_to ? fmtDate(selectedPlan.valid_to) : "No expiry"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {(selectedPlan.seasonal_overrides?.length ?? 0) > 0 && (
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Seasonal Overrides</p>
+                    <div className="space-y-3">
+                      {selectedPlan.seasonal_overrides!.map((o, i) => (
+                        <div key={i} className="bg-white rounded-lg p-3 border border-gray-200">
+                          <p className="font-semibold text-sm text-gray-800 mb-2">{o.season?.name || `Season ${i + 1}`}</p>
+                          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                            <span>{fmtDate(o.season?.start)} → {fmtDate(o.season?.end)}</span>
+                            {o.daily_rate && <span>Daily: {fmtCurrency(o.daily_rate, selectedPlan.currency)}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {((selectedPlan.taxes?.length ?? 0) > 0 || (selectedPlan.fees?.length ?? 0) > 0) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {(selectedPlan.taxes?.length ?? 0) > 0 && (
+                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Taxes</p>
+                        {selectedPlan.taxes!.map((t, i) => (
+                          <div key={i} className="flex justify-between items-center py-1.5 border-b last:border-0 border-gray-100">
+                            <span className="text-sm font-medium text-gray-800">{t.code}</span>
+                            <span className="text-sm font-bold text-[#1EA2E4]">{(t.rate * 100).toFixed(1)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(selectedPlan.fees?.length ?? 0) > 0 && (
+                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Fees</p>
+                        {selectedPlan.fees!.map((f, i) => (
+                          <div key={i} className="flex justify-between items-center py-1.5 border-b last:border-0 border-gray-100">
+                            <span className="text-sm font-medium text-gray-800">{f.code}</span>
+                            <span className="text-sm font-bold text-[#1EA2E4]">{fmtCurrency(f.amount, selectedPlan.currency)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {selectedPlan.notes && (
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Notes</p>
+                    <p className="text-sm text-gray-700">{selectedPlan.notes}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-gray-200 bg-gray-50 px-6 py-4 flex justify-between">
+                <button onClick={() => setIsViewOpen(false)} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium">Close</button>
+                <button onClick={() => openEdit(selectedPlan)} className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg text-sm font-medium flex items-center gap-2">
+                  <Edit className="w-4 h-4" /> Edit Plan
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── ADD / EDIT DRAWER ── */}
+      {isFormOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeForm} />
+          <div className="absolute inset-y-0 right-0 flex max-w-full">
+            <div className="relative w-screen max-w-2xl bg-white shadow-2xl flex flex-col">
+              <div className={`px-8 py-5 bg-gradient-to-r ${isEditMode ? "from-violet-600 to-indigo-700" : "from-[#1EA2E4] to-[#0d7fc4]"}`}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-white/70 text-sm">{isEditMode ? "Editing" : "Creating"}</p>
+                    <h2 className="text-2xl font-bold text-white">{isEditMode ? "Update Rate Plan" : "New Rate Plan"}</h2>
+                  </div>
+                  <button onClick={closeForm} className="p-2 bg-white/20 hover:bg-white/30 rounded-lg">
+                    <X className="w-5 h-5 text-white" />
+                  </button>
+                </div>
+                {formData.name && (
+                  <div className="mt-4 bg-white/15 rounded-xl px-4 py-3 flex items-center gap-4 flex-wrap">
+                    <div>
+                      <p className="text-white/60 text-xs">Plan Name</p>
+                      <p className="font-bold text-white text-sm">{formData.name}</p>
+                    </div>
+                    <div className="w-px h-8 bg-white/30" />
+                    <div>
+                      <p className="text-white/60 text-xs">Daily Rate</p>
+                      <p className="font-bold text-white">{formData.currency} {formData.daily_rate || "0.00"}</p>
+                    </div>
+                    <div className="w-px h-8 bg-white/30" />
+                    <div>
+                      <p className="text-white/60 text-xs">Status</p>
+                      <p className="font-bold text-white text-sm">{formData.active ? "Active" : "Inactive"}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-8 py-6 space-y-7">
+
+                {/* Conflict banner */}
+                {conflictPlanId && (
+                  <div className="rounded-xl bg-amber-50 border border-amber-300 p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-amber-800 text-sm">Rate plan already exists</p>
+                        <p className="text-amber-700 text-xs mt-0.5">{conflictMsg} — you can edit the existing plan or replace it with the data entered above.</p>
+                        <div className="mt-3 flex gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={handleEditExisting}
+                            disabled={saving}
+                            className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 disabled:opacity-60 transition-colors"
+                          >
+                            Edit Existing Plan
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleReplace}
+                            disabled={saving}
+                            className="px-3 py-1.5 bg-white border border-amber-400 text-amber-700 rounded-lg text-xs font-semibold hover:bg-amber-50 disabled:opacity-60 transition-colors"
+                          >
+                            {saving ? "Replacing…" : "Replace with This Plan"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 1 ─ Plan Details */}
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-7 h-7 rounded-full bg-blue-100 text-[#1EA2E4] flex items-center justify-center text-sm font-bold">1</div>
+                    <h3 className="font-semibold text-gray-800">Plan Details</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Plan Name <span className="text-red-500">*</span></label>
+                      <input
+                        type="text" value={formData.name}
+                        onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]"
+                        placeholder="e.g. Standard Economy Plan"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Branch <span className="ml-1 text-xs font-normal text-gray-400">optional — blank applies to all branches</span>
+                        </label>
+                        <select value={formData.branch_id} onChange={e => setFormData(p => ({ ...p, branch_id: e.target.value }))}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white">
+                          <option value="">All branches</option>
+                          {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Currency</label>
+                        <select value={formData.currency} onChange={e => setFormData(p => ({ ...p, currency: e.target.value }))}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white">
+                          <option value="USD">USD ($)</option>
+                          <option value="ZWL">ZWL ($)</option>
+                          <option value="EUR">EUR (€)</option>
+                          <option value="GBP">GBP (£)</option>
+                          <option value="ZAR">ZAR (R)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Vehicle Class — ALWAYS required */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Vehicle Class <span className="text-red-500">*</span>
+                        <span className="ml-1.5 text-xs text-gray-400 font-normal">Required for all plan types</span>
+                      </label>
+                      <select value={formData.vehicle_class} onChange={e => setFormData(p => ({ ...p, vehicle_class: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white">
+                        <option value="">Select class...</option>
+                        {vehicleClasses.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Plan Scope <span className="text-red-500">*</span></label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {(["vehicle_model", "vehicle_unit"] as RatePlanType[]).map(t => {
+                          const m = TYPE_META[t]; const Icon = m.icon;
+                          const gradients: Record<string, string> = {
+                            vehicle_model: "#10b981,#0f766e",
+                            vehicle_unit: "#8b5cf6,#7c3aed",
+                          };
+                          return (
+                            <button key={t} type="button" onClick={() => setPlanType(t)}
+                              className={`p-3.5 rounded-xl border-2 text-left transition-all ${planType === t ? "border-transparent shadow-md" : "border-gray-200 bg-gray-50"}`}
+                              style={planType === t ? { background: `linear-gradient(to bottom right, ${gradients[t]})` } : {}}>
+                              <Icon className={`w-5 h-5 mb-2 ${planType === t ? "text-white" : "text-gray-500"}`} />
+                              <p className={`text-sm font-semibold ${planType === t ? "text-white" : "text-gray-800"}`}>{m.label}</p>
+                              <p className={`text-xs mt-0.5 ${planType === t ? "text-white/70" : "text-gray-400"}`}>
+                                {t === "vehicle_model" ? "One model" : "One unit"}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1.5">
+                        {planType === "vehicle_model" && "Applies to all units of the selected model."}
+                        {planType === "vehicle_unit" && "Most specific — applies to a single vehicle unit only."}
+                      </p>
+                    </div>
+
+                    {planType === "vehicle_model" && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Vehicle Model</label>
+                        <select value={formData.vehicle_model_id || ""} onChange={e => setFormData(p => ({ ...p, vehicle_model_id: e.target.value || null }))}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white">
+                          <option value="">Select model...</option>
+                          {vehicleModels.map(m => <option key={m._id} value={m._id}>{m.make} {m.model} {m.year}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {planType === "vehicle_unit" && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Vehicle Unit</label>
+                        <select value={formData.vehicle_id || ""} onChange={e => setFormData(p => ({ ...p, vehicle_id: e.target.value || null }))}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white">
+                          <option value="">Select unit...</option>
+                          {vehicleUnits.map(u => <option key={u._id} value={u._id}>{u.vin} ({u.plate_number})</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
+                      <textarea value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] resize-none text-sm"
+                        placeholder="Internal notes about this rate plan" rows={2} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2 ─ Pricing */}
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm font-bold">2</div>
+                    <h3 className="font-semibold text-gray-800">Pricing Rates</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <RateInput label="Daily Rate *" value={formData.daily_rate} onChange={v => setFormData(p => ({ ...p, daily_rate: v }))} currency={formData.currency} />
+                    <RateInput label="Weekly Rate" value={formData.weekly_rate || ""} onChange={v => setFormData(p => ({ ...p, weekly_rate: v }))} currency={formData.currency} />
+                    <RateInput label="Monthly Rate" value={formData.monthly_rate || ""} onChange={v => setFormData(p => ({ ...p, monthly_rate: v }))} currency={formData.currency} />
+                    <RateInput label="Weekend Rate" value={formData.weekend_rate || ""} onChange={v => setFormData(p => ({ ...p, weekend_rate: v }))} currency={formData.currency} />
+                  </div>
+                </div>
+
+                {/* 3 ─ Seasonal Overrides */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm font-bold">3</div>
+                      <h3 className="font-semibold text-gray-800">Seasonal Overrides</h3>
+                      {(formData.seasonal_overrides?.length ?? 0) > 0 && (
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold">{formData.seasonal_overrides!.length}</span>
+                      )}
+                    </div>
+                    <button type="button" onClick={addOverride}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-semibold hover:bg-amber-100">
+                      <Plus className="w-3.5 h-3.5" /> Add Season
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    {(formData.seasonal_overrides || []).map((o, i) => (
+                      <div key={i} className="border border-amber-200 bg-amber-50/50 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-sm font-semibold text-amber-800">Season {i + 1}</p>
+                          <button type="button" onClick={() => removeOverride(i)} className="p-1 text-red-400 hover:text-red-600">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 mb-3">
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Name</label>
+                            <input value={o.season?.name || ""} onChange={e => setOverrideField(i, "season.name", e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" placeholder="e.g. Summer" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Start</label>
+                            <input type="date" value={o.season?.start || ""} onChange={e => setOverrideField(i, "season.start", e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">End</label>
+                            <input type="date" value={o.season?.end || ""} onChange={e => setOverrideField(i, "season.end", e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <RateInput label="Daily" value={o.daily_rate as string || ""} onChange={v => setOverrideField(i, "daily_rate", v)} currency={formData.currency} />
+                          <RateInput label="Weekly" value={o.weekly_rate as string || ""} onChange={v => setOverrideField(i, "weekly_rate", v)} currency={formData.currency} />
+                        </div>
+                      </div>
+                    ))}
+                    {(formData.seasonal_overrides?.length ?? 0) === 0 && (
+                      <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+                        <Calendar className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm text-gray-400">No seasonal overrides. Click "Add Season" to create one.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4 ─ Taxes */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold">4</div>
+                      <h3 className="font-semibold text-gray-800">Taxes</h3>
+                      {(formData.taxes?.length ?? 0) > 0 && (
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">{formData.taxes!.length}</span>
+                      )}
+                    </div>
+                    <button type="button" onClick={addTax}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-semibold hover:bg-blue-100">
+                      <Plus className="w-3.5 h-3.5" /> Add Tax
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {(formData.taxes || []).map((tax, i) => (
+                      <div key={i} className="flex items-center gap-3 bg-blue-50/50 border border-blue-200 rounded-xl px-4 py-3">
+                        <div className="flex-1">
+                          <label className="block text-xs text-gray-500 mb-1">Code</label>
+                          <input value={tax.code} onChange={e => setTaxField(i, "code", e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="e.g. VAT" />
+                        </div>
+                        <div className="w-28">
+                          <label className="block text-xs text-gray-500 mb-1">Rate (%)</label>
+                          <div className="relative">
+                            <input type="number" min="0" max="100" step="0.01" value={(tax.rate * 100).toFixed(2)}
+                              onChange={e => setTaxField(i, "rate", String(parseFloat(e.target.value) / 100))}
+                              className="w-full pl-3 pr-7 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="15" />
+                            <Percent className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => removeTax(i)} className="mt-5 p-1.5 text-red-400 hover:text-red-600">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    {(formData.taxes?.length ?? 0) === 0 && (
+                      <div className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center">
+                        <p className="text-sm text-gray-400">No taxes added yet.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 5 ─ Fees */}
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-sm font-bold">5</div>
+                      <h3 className="font-semibold text-gray-800">Fees</h3>
+                      {(formData.fees?.length ?? 0) > 0 && (
+                        <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">{formData.fees!.length}</span>
+                      )}
+                    </div>
+                    <button type="button" onClick={addFee}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-xs font-semibold hover:bg-purple-100">
+                      <Plus className="w-3.5 h-3.5" /> Add Fee
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {(formData.fees || []).map((fee, i) => (
+                      <div key={i} className="flex items-center gap-3 bg-purple-50/50 border border-purple-200 rounded-xl px-4 py-3">
+                        <div className="flex-1">
+                          <label className="block text-xs text-gray-500 mb-1">Code</label>
+                          <input value={fee.code} onChange={e => setFeeField(i, "code", e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" placeholder="e.g. CLEANING_FEE" />
+                        </div>
+                        <div className="w-32">
+                          <label className="block text-xs text-gray-500 mb-1">Amount</label>
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                            <input type="number" min="0" step="0.01" value={fee.amount as string}
+                              onChange={e => setFeeField(i, "amount", e.target.value)}
+                              className="w-full pl-6 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-400" placeholder="10.00" />
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => removeFee(i)} className="mt-5 p-1.5 text-red-400 hover:text-red-600">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    {(formData.fees?.length ?? 0) === 0 && (
+                      <div className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center">
+                        <p className="text-sm text-gray-400">No fees added yet.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 6 ─ Validity & Status */}
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-sm font-bold">6</div>
+                    <h3 className="font-semibold text-gray-800">Validity & Status</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Valid From</label>
+                      <input type="date" value={formData.valid_from || ""}
+                        onChange={e => setFormData(p => ({ ...p, valid_from: e.target.value || "" }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Valid To (Optional)</label>
+                      <input type="date" value={formData.valid_to || ""}
+                        onChange={e => setFormData(p => ({ ...p, valid_to: e.target.value || null }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]" />
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setFormData(p => ({ ...p, active: !p.active }))}
+                    className={`flex items-center gap-4 w-full p-4 rounded-xl border-2 transition-all ${formData.active ? "border-emerald-400 bg-emerald-50" : "border-gray-200 bg-gray-50"}`}>
+                    <div className={`w-12 h-6 rounded-full relative transition-colors ${formData.active ? "bg-emerald-500" : "bg-gray-300"}`}>
+                      <div className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all" style={{ left: formData.active ? "26px" : "2px" }} />
+                    </div>
+                    <div className="text-left">
+                      <p className={`font-semibold text-sm ${formData.active ? "text-emerald-700" : "text-gray-600"}`}>{formData.active ? "Active" : "Inactive"}</p>
+                      <p className="text-xs text-gray-500">{formData.active ? "This plan is live and being applied" : "This plan is disabled"}</p>
+                    </div>
+                  </button>
+                </div>
+
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-gray-200 bg-gray-50 px-8 py-4 flex justify-between items-center">
+                <button onClick={closeForm} className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-100">Cancel</button>
+                <button
+                  onClick={handleSave}
+                  disabled={!formData.name || !formData.vehicle_class || !formData.daily_rate || !formData.valid_from || saving}
+                  className="px-6 py-2.5 bg-gradient-to-r from-[#1EA2E4] to-[#0d7fc4] text-white rounded-xl font-semibold shadow-md hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {saving ? (
+                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving...</>
+                  ) : (
+                    <><Save className="w-4 h-4" />{isEditMode ? "Update Plan" : "Create Plan"}</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE CONFIRM ── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center">
+            <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-7 h-7 text-red-600" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Delete Rate Plan</h3>
+            <p className="text-sm text-gray-500 mb-6">This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteTarget(null)} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50">Cancel</button>
+              <button onClick={() => handleDelete(deleteTarget)} className="flex-1 py-2.5 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SNACKBAR ── */}
+      {snackbar.show && (
+        <div className="fixed bottom-5 right-5 z-50">
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border min-w-[280px] ${
+            snackbar.type === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+            : snackbar.type === "error" ? "bg-red-50 border-red-200 text-red-800"
+            : "bg-blue-50 border-blue-200 text-blue-800"
+          }`}>
+            {snackbar.type === "success" && <CheckCircle className="w-5 h-5 flex-shrink-0" />}
+            {snackbar.type === "error" && <AlertCircle className="w-5 h-5 flex-shrink-0" />}
+            <span className="text-sm font-medium flex-1">{snackbar.message}</span>
+            <button onClick={() => setSnackbar(p => ({ ...p, show: false }))}><X className="w-4 h-4" /></button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default RatePlans;

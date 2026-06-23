@@ -3,22 +3,26 @@ import {
   Users,
   Car,
   Calendar,
- Tag,
+  Tag,
   Wrench,
   AlertTriangle,
   LogOut,
   X,
-
   ShieldCheck,
   UserCheck,
+  Bell,
+  Receipt,
+  BookOpen,
+  UserCircle,
+  MessageSquare,
 } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import Logo from "../assets/Logo.png";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-
 import { authService } from "../features/auth/authService";
 import { AlertCircle } from "lucide-react";
+import NotificationBell from "./NotificationBell";
+import { useAppSelector } from "../app/hooks";
 
 type SidebarProps = {
   isOpen?: boolean;
@@ -27,6 +31,7 @@ type SidebarProps = {
 
 const ManagerSidebar = ({ isOpen = true, onClose = () => {} }: SidebarProps) => {
   const navigate = useNavigate();
+  const authUser = useAppSelector(s => s.auth.user);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -50,7 +55,7 @@ const handleCancelLogout = () => {
 
 
   const sidebarItems = [
-    { icon: LayoutDashboard, label: "Dashboard", path: "/admin-dashboard" },
+    { icon: LayoutDashboard, label: "Dashboard", path: "/branch-manager-dashboard" },
 
     // Core management
     { icon: Users, label: "Users", path: "/manager-users" },
@@ -70,20 +75,17 @@ const handleCancelLogout = () => {
     
     { icon: ShieldCheck, label: "Rate Plans", path: "/manager-rate-plans" },
     { icon: Tag, label: "Promo Codes", path: "/manager-promo-codes" },
+    { icon: Bell, label: "Notifications", path: "/manager-notifications" },
+    { icon: MessageSquare, label: "Chats", path: "/manager-chats" },
 
     // // Drivers feature
     { icon: UserCheck, label: "Driver Profiles", path: "/manager-driver-profiles" },
     { icon: Calendar, label: "Driver Bookings", path: "/manager-driver-bookings"},
+    { icon: Receipt, label: "Expenses", path: "/manager-expenses" },
+    { icon: BookOpen, label: "Accounting", path: "/manager-accounting" },
 
-    // // Finance & comms
-    // { icon: CreditCard, label: "Payments", path: "/admin-payments" },
-    // { icon: MessageSquare, label: "Chats", path: "/admin-chats" },
-
-    // // Analytics
-    // { icon: BarChart3, label: "Reports", path: "/admin-reports" },
-
-    // Auth
-    
+    // Account
+    { icon: UserCircle, label: "My Profile", path: "/manager-profile" },
     { icon: LogOut, label: "Logout", path: "#", onClick: () => setShowLogoutModal(true) },
   ];
 
@@ -106,16 +108,19 @@ const handleCancelLogout = () => {
         lg:translate-x-0 lg:static lg:inset-0 shadow-xl flex flex-col h-screen`}
       >
         {/* Header with Logo */}
-        <div className="flex items-center justify-center h-24 px-6 border-b border-gray-200 flex-shrink-0 relative">
-          <img src={Logo} alt="Logo" className="w-16 h-16 object-contain" />
+        <div className="flex items-center justify-between h-24 px-6 border-b border-gray-200 flex-shrink-0">
+          <img src={Logo} alt="Logo" className="w-14 h-14 object-contain" />
 
-          {/* Mobile close button */}
-          <button
-            onClick={onClose}
-            className="lg:hidden absolute right-6 p-2 rounded-xl bg-gray-100 hover:bg-gray-200"
-          >
-            <X className="w-5 h-5 text-gray-600" />
-          </button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            {/* Mobile close button */}
+            <button
+              onClick={onClose}
+              className="lg:hidden p-2 rounded-xl bg-gray-100 hover:bg-gray-200"
+            >
+              <X className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
         </div>
 
         {/* Search Bar */}
@@ -176,9 +181,27 @@ const handleCancelLogout = () => {
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 text-center text-xs text-gray-500">
-          © {currentYear} Morental — Admin
+        {/* User card footer */}
+        <div className="px-4 py-4 border-t border-gray-100 flex-shrink-0">
+          <button
+            onClick={() => { navigate('/manager-profile'); if (window.innerWidth < 1024) onClose(); }}
+            className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-[#1EA2E4]/8 transition-colors group text-left"
+          >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg, #0A1628 0%, #1EA2E4 100%)' }}>
+              {authUser?.full_name
+                ? authUser.full_name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
+                : (authUser?.email?.[0] ?? 'M').toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-800 truncate leading-none">
+                {authUser?.full_name || 'Branch Manager'}
+              </p>
+              <p className="text-xs text-slate-400 truncate mt-0.5">{authUser?.email}</p>
+            </div>
+            <UserCircle className="w-4 h-4 text-slate-300 group-hover:text-[#1EA2E4] flex-shrink-0" />
+          </button>
+          <p className="text-center text-xs text-gray-400 mt-2">© {currentYear} Morental</p>
         </div>
       </div>
 

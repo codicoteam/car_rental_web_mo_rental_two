@@ -276,4 +276,67 @@ export function getErrorDisplay(err: unknown): {
   };
 }
 
+/** POST /profiles/manager/by-staff — create manager profile with branch assignment */
+export async function createManagerProfile(
+  targetUserId: string,
+  branchIds: string[],
+  fullName: string
+): Promise<any> {
+  try {
+    const res = await axios.post(
+      `${API_BASE}/profiles/manager/by-staff`,
+      { target_user_id: targetUserId, branch_ids: branchIds, full_name: fullName },
+      {
+        headers: {
+          ...authHeaders(),
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    return res.data;
+  } catch (err) {
+    throw toApiError(err, "Failed to create manager profile");
+  }
+}
+
+/** POST /profiles/branch-receptionist/by-staff — create branch_receptionist profile with branch assignment */
+export async function createBranchReceptionistProfile(
+  targetUserId: string,
+  branchIds: string[],
+  fullName: string
+): Promise<any> {
+  try {
+    const res = await axios.post(
+      `${API_BASE}/profiles/branch-receptionist/by-staff`,
+      { target_user_id: targetUserId, branch_ids: branchIds, full_name: fullName },
+      {
+        headers: {
+          ...authHeaders(),
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    return res.data;
+  } catch (err) {
+    throw toApiError(err, "Failed to create branch receptionist profile");
+  }
+}
+
+/** GET /profiles/user/:userId — fetch all profiles for a given user */
+export async function fetchProfilesByUserId(userId: string): Promise<{
+  success?: boolean;
+  data?: { profiles: any[]; total: number };
+}> {
+  try {
+    const res = await axios.get(`${API_BASE}/profiles/user/${userId}`, {
+      headers: { ...authHeaders(), Accept: "application/json" },
+    });
+    return res.data;
+  } catch (err) {
+    throw toApiError(err, "Failed to fetch user profiles");
+  }
+}
+
 export default {};

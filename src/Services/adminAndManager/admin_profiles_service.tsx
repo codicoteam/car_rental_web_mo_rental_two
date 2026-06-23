@@ -84,9 +84,13 @@ function toApiError(err: unknown, fallbackMsg: string): ApiError {
 
 /** ===== Domain types ===== */
 
+export type KycStatus = "not_submitted" | "pending" | "verified" | "rejected";
+
 export type DriverLicense = {
   number?: string;
   imageUrl?: string;
+  front_url?: string;
+  back_url?: string;
   country?: string;
   class?: string;
   expires_at?: string | Date;
@@ -139,6 +143,16 @@ export interface IProfile {
   approval_limit_usd?: number;
 
   verified?: boolean;
+
+  // KYC
+  kyc_status?: KycStatus;
+  kyc_rejection_reason?: string;
+  kyc_reviewed_by?: string | { _id: string; full_name: string; email?: string };
+  kyc_reviewed_at?: string;
+  national_id_front_url?: string;
+  national_id_back_url?: string;
+
+  created_by?: string | { _id: string; full_name: string; email?: string };
   created_at?: string;
   updated_at?: string;
   __v?: number;
@@ -285,6 +299,36 @@ export async function createManagerProfileByStaff(
   }
 }
 
+export type CreateBranchReceptionistProfilePayload = BaseCreateProfilePayload & {
+  branch_ids: string[];
+};
+
+/**
+ * POST /profiles/branch-receptionist/by-staff
+ * Create branch_receptionist profile by admin/manager
+ */
+export async function createBranchReceptionistProfileByStaff(
+  payload: CreateBranchReceptionistProfilePayload
+): Promise<IProfile | { success: boolean; data?: any }> {
+  try {
+    const res = await axios.post(
+      `${API_BASE}/profiles/branch-receptionist/by-staff`,
+      payload,
+      {
+        headers: {
+          ...authHeaders(),
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    const body = res.data;
+    return body?.data || body;
+  } catch (err) {
+    throw toApiError(err, "Failed to create branch receptionist profile");
+  }
+}
+
 /**
  * GET /profiles/user/:userId
  * Get all profiles by user id (returns { success, data: { profiles, total }})
@@ -298,6 +342,10 @@ export async function fetchProfilesByUserId(
     });
     return res.data as IProfilesByUserResponse;
   } catch (err) {
+    // Treat 404 as "user has no profiles yet" — not an error
+    if (axios.isAxiosError(err) && err.response?.status === 404) {
+      return { success: true, data: { profiles: [], total: 0 } };
+    }
     throw toApiError(err, "Failed to fetch profiles by user id");
   }
 }
@@ -348,6 +396,32 @@ export async function deleteProfileById(
     return { success: true };
   } catch (err) {
     throw toApiError(err, "Failed to delete profile");
+  }
+}
+
+/**
+ * PATCH /profiles/:profileId/kyc
+ * Reviewer updates KYC status (approve / reject / reset)
+ */
+export async function updateKycStatus(
+  profileId: string,
+  payload: { kyc_status: KycStatus; kyc_rejection_reason?: string }
+): Promise<IProfile> {
+  try {
+    const res = await axios.patch(
+      `${API_BASE}/profiles/${profileId}/kyc`,
+      payload,
+      {
+        headers: {
+          ...authHeaders(),
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    return (res.data?.data || res.data) as IProfile;
+  } catch (err) {
+    throw toApiError(err, "Failed to update KYC status");
   }
 }
 

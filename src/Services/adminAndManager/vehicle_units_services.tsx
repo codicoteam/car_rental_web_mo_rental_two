@@ -40,6 +40,12 @@ export interface IVehicleMetadata {
   [key: string]: any;
 }
 
+export interface IVehicleAccounting {
+  purchase_price?: number | null;
+  purchased_at?: string | null;
+  currency?: string;
+}
+
 export interface IVehicleModelSummary {
   _id: string;
   make?: string;
@@ -100,6 +106,7 @@ export interface IVehicleUnit {
   last_service_at?: string | null;
   last_service_odometer_km?: number | null;
   metadata?: IVehicleMetadata;
+  accounting?: IVehicleAccounting;
   created_at?: string;
   updated_at?: string;
   __v?: number;
@@ -128,6 +135,7 @@ export type CreateVehiclePayload = {
   availability_state?: AvailabilityState;
   photos?: string[];
   metadata?: IVehicleMetadata;
+  accounting?: IVehicleAccounting;
 };
 
 // Add this type for service record payload

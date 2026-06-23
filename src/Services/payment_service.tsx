@@ -131,24 +131,25 @@ const PaymentService = {
        * Get all payments with filters (GET)
        * GET /api/v1/payments?type=driver_booking&status=pending&page=1&limit=10
        */
-      getAllPayments: async (filters?: { 
-        type?: string;  // 'driver_booking' or 'reservation'
-        status?: string; // 'pending', 'paid', 'cancelled', 'sent'
-        page?: number; 
-        limit?: number 
+      getAllPayments: async (filters?: {
+        type?: string;
+        status?: string;
+        page?: number;
+        limit?: number;
+        branch_id?: string;
       }): Promise<any> => {
         try {
           const token = getAuthToken();
-          
-          // Build query string if filters provided
+
           const params = new URLSearchParams();
           if (filters?.type) params.append("type", filters.type);
           if (filters?.status) params.append("status", filters.status);
           if (filters?.page) params.append("page", filters.page.toString());
           if (filters?.limit) params.append("limit", filters.limit.toString());
-          
+          if (filters?.branch_id) params.append("branch_id", filters.branch_id);
+
           const queryString = params.toString() ? `?${params.toString()}` : "";
-          
+
           const response = await axios.get(`${BASE_URL}${queryString}`, {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           });

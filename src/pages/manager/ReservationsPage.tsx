@@ -1,10 +1,30 @@
 // src/pages/AdminReservationsPage.tsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch } from "../../app/store";
 import { fetchReservations , removeReservation , updateStatus } from "../../features/reservation/reservationthunks";
 import { reservationsService } from "../../Services/reservations_service";
 import ManagerSidebar from "../../components/ManagerSideBar";
+import {
+  createReservation,
+  type CreateReservationPayload,
+} from "../../Services/adminAndManager/reservations_service";
+import {
+  fetchBranches,
+  type IBranch,
+} from "../../Services/adminAndManager/admin_branch_service";
+import {
+  fetchVehicleUnits,
+  type IVehicleUnit,
+  type IVehicleModelSummary,
+  type IBranchSummary,
+} from "../../Services/adminAndManager/vehicle_units_services";
+import {
+  fetchAllUsers,
+  fetchProfilesByUserId,
+  type IUser,
+} from "../../Services/adminAndManager/admi_users_service";
 import {
   Search,
   Eye,
@@ -147,6 +167,7 @@ interface TransformedReservation {
 
 const ReservationsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
   
   const apiResponse = useSelector(
     (state: any) => state.reservations.reservations
@@ -180,18 +201,64 @@ const ReservationsPage: React.FC = () => {
   const [editFormData, setEditFormData] = useState<any>(null);
   const [isUpdatingReservation, setIsUpdatingReservation] = useState(false);
 
-  // Helper function to get manager branch ID from localStorage
+  // ── Create Reservation panel ──────────────────────────────────
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelStep, setPanelStep] = useState(1);
+  const [panelSubmitting, setPanelSubmitting] = useState(false);
+  const [isWalkIn, setIsWalkIn] = useState(true);
+  const [branches, setBranches] = useState<IBranch[]>([]);
+  const [vehicleUnits, setVehicleUnits] = useState<IVehicleUnit[]>([]);
+  const [users, setUsers] = useState<IUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [userDropOpen, setUserDropOpen] = useState(false);
+  const userDropRef = useRef<HTMLDivElement>(null);
+  // Step 1 – customer details
+  const [custName, setCustName] = useState("");
+  const [custPhone, setCustPhone] = useState("");
+  const [custEmail, setCustEmail] = useState("");
+  const [licNumber, setLicNumber] = useState("");
+  const [licClass, setLicClass] = useState("");
+  const [licCountry, setLicCountry] = useState("ZW");
+  const [licExpiry, setLicExpiry] = useState("");
+  const [licVerified, setLicVerified] = useState(false);
+  // Customer profile state for registered customer flow
+  const [customerProfile, setCustomerProfile] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileNotFound, setProfileNotFound] = useState(false);
+  const [proceedWithoutProfile, setProceedWithoutProfile] = useState(false);
+  // Step 2 – vehicle
+  const [pickupBranchId, setPickupBranchId] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  // Step 3 – dates & pricing
+  const [dropoffBranchId, setDropoffBranchId] = useState("");
+  const [pickupAt, setPickupAt] = useState("");
+  const [dropoffAt, setDropoffAt] = useState("");
+  const [reservationNotes, setReservationNotes] = useState("");
+  const [totalAmount, setTotalAmount] = useState("");
+  const [pricingCurrency, setPricingCurrency] = useState("USD");
+
+  // Read current user roles from localStorage
+  const getCurrentUserRoles = (): string[] => {
+    try {
+      const raw = localStorage.getItem('car_rental_auth');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return parsed?.user?.roles || [];
+    } catch { return []; }
+  };
+
+  // Get manager/receptionist branch ID from localStorage
   const getManagerBranchId = (): string | null => {
     try {
       const branchData = localStorage.getItem('manager_branch_data');
       if (branchData) {
         const parsed = JSON.parse(branchData);
-        return parsed._id;
+        return parsed._id || null;
       }
-      const branchId = localStorage.getItem('manager_branch_id');
-      return branchId;
-    } catch (error) {
-      console.error('Error getting manager branch ID from localStorage:', error);
+      return localStorage.getItem('manager_branch_id');
+    } catch {
       return null;
     }
   };
@@ -296,24 +363,17 @@ const ReservationsPage: React.FC = () => {
   // First transform all reservations
   const allReservations = reservations.map(transformReservation);
 
-  // Filter reservations by manager's branch ID - COPIED FROM ManagerReservations.tsx
+  // Filter reservations by branch; admins see all
   const filterReservationsByBranch = (reservationsList: TransformedReservation[]): TransformedReservation[] => {
+    const roles = getCurrentUserRoles();
+    if (roles.includes('admin')) return reservationsList;
+
     const managerBranchId = getManagerBranchId();
-    
-    if (!managerBranchId) {
-      console.log('No manager branch ID found in localStorage');
-      return [];
-    }
-    
-    const filtered = reservationsList.filter(reservation => {
-      const pickupBranchId = (reservation as any).pickupBranchId;
-      const dropoffBranchId = (reservation as any).dropoffBranchId;
-      
-      return pickupBranchId === managerBranchId || dropoffBranchId === managerBranchId;
-    });
-    
-    console.log(`Found ${filtered.length} reservations for branch ${managerBranchId}`);
-    return filtered;
+    if (!managerBranchId) return reservationsList; // fail-open: show all if no branch stored
+
+    return reservationsList.filter(r =>
+      r.pickupBranchId === managerBranchId || r.dropoffBranchId === managerBranchId
+    );
   };
 
   // Then filter by manager's branch
@@ -321,7 +381,16 @@ const ReservationsPage: React.FC = () => {
 
   // Then apply tab and search filters
   const filteredReservations = branchFilteredReservations.filter(res => {
-    const matchesTab = selectedTab === 'all' || res.status.toLowerCase() === selectedTab;
+    let matchesTab = selectedTab === 'all';
+    if (!matchesTab) {
+      if (selectedTab === 'closed') {
+        matchesTab = res.rawStatus === 'closed' || res.rawStatus === 'completed';
+      } else if (selectedTab === 'checked_in') {
+        matchesTab = res.rawStatus === 'checked_in' || res.rawStatus === 'returned';
+      } else {
+        matchesTab = res.rawStatus === selectedTab;
+      }
+    }
     const matchesSearch = searchTerm === "" ||
       res.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
       res.vehicleName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -333,8 +402,8 @@ const ReservationsPage: React.FC = () => {
   const stats = {
     total: branchFilteredReservations.length,
     pending: branchFilteredReservations.filter(r => r.rawStatus === "pending").length,
-    active: branchFilteredReservations.filter(r => r.rawStatus === "active").length,
-    completed: branchFilteredReservations.filter(r => r.rawStatus === "completed").length,
+    active: branchFilteredReservations.filter(r => ["confirmed", "checked_out", "checked_in", "returned"].includes(r.rawStatus)).length,
+    completed: branchFilteredReservations.filter(r => ["closed", "completed"].includes(r.rawStatus)).length,
   };
 
   const handleDeleteReservation = async (reservationId: string) => {
@@ -462,13 +531,180 @@ const ReservationsPage: React.FC = () => {
     }
   };
 
+  // Load branches + vehicles on mount
+  useEffect(() => {
+    fetchBranches().then(r => setBranches(r.data || [])).catch(() => {});
+    fetchVehicleUnits(1, 200).then(r => setVehicleUnits(r.data?.items || [])).catch(() => {});
+  }, []);
+
+  // Close user dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (userDropRef.current && !userDropRef.current.contains(e.target as Node))
+        setUserDropOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const resetPanel = () => {
+    setPanelStep(1); setIsWalkIn(true);
+    setUserSearch(""); setSelectedUserId(""); setUserDropOpen(false);
+    setCustName(""); setCustPhone(""); setCustEmail("");
+    setLicNumber(""); setLicClass(""); setLicCountry("ZW"); setLicExpiry(""); setLicVerified(false);
+    setCustomerProfile(null); setProfileLoading(false); setProfileNotFound(false); setProceedWithoutProfile(false);
+    setPickupBranchId(""); setSelectedVehicleId("");
+    setDropoffBranchId(""); setPickupAt(""); setDropoffAt(""); setReservationNotes("");
+    setTotalAmount(""); setPricingCurrency("USD");
+    setPanelSubmitting(false);
+  };
+
+  const openPanel = async () => {
+    resetPanel();
+    setPanelOpen(true);
+    if (users.length === 0) {
+      setUsersLoading(true);
+      try { const r = await fetchAllUsers(1, 300); setUsers(r.data?.users || []); }
+      catch { /* silent */ } finally { setUsersLoading(false); }
+    }
+  };
+
+  const selectUser = (u: IUser) => {
+    setSelectedUserId(u._id);
+    setCustName(u.full_name || "");
+    setCustPhone(u.phone || "");
+    setCustEmail(u.email || "");
+    setUserSearch(u.full_name || u.email || "");
+    setUserDropOpen(false);
+    // Reset and fetch customer profile
+    setCustomerProfile(null);
+    setProfileNotFound(false);
+    setProceedWithoutProfile(false);
+    setLicNumber(""); setLicClass(""); setLicCountry("ZW"); setLicExpiry(""); setLicVerified(false);
+    setProfileLoading(true);
+    fetchProfilesByUserId(u._id)
+      .then(res => {
+        const profiles: any[] = res.data?.profiles || [];
+        const custProf = profiles.find((p: any) => p.role === "customer") || null;
+        if (custProf) {
+          setCustomerProfile(custProf);
+          if (custProf.full_name) setCustName(custProf.full_name);
+          const lic = custProf.driver_license;
+          if (lic) {
+            setLicNumber(lic.number || "");
+            setLicClass(lic.class || "");
+            setLicCountry(lic.country || "ZW");
+            setLicExpiry(lic.expires_at ? lic.expires_at.slice(0, 10) : "");
+            setLicVerified(lic.verified || false);
+          }
+        } else {
+          setProfileNotFound(true);
+        }
+      })
+      .catch(() => setProfileNotFound(true))
+      .finally(() => setProfileLoading(false));
+  };
+
+  const filteredUsers = users.filter(u => {
+    const q = userSearch.toLowerCase();
+    return !q || u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.phone?.toLowerCase().includes(q);
+  }).slice(0, 20);
+
+  const getVehicleBranchId = (v: IVehicleUnit): string => {
+    if (!v.branch_id) return "";
+    return typeof v.branch_id === "object" ? (v.branch_id as IBranchSummary)._id || "" : v.branch_id as string;
+  };
+
+  const getVehicleLabel = (v: IVehicleUnit): string => {
+    if (!v.vehicle_model_id) return v.plate_number;
+    if (typeof v.vehicle_model_id === "object") {
+      const m = v.vehicle_model_id as IVehicleModelSummary;
+      return `${m.make || ""} ${m.model || ""} (${m.year || ""}) – ${v.plate_number}`;
+    }
+    return v.plate_number;
+  };
+
+  const vehiclesForBranch = vehicleUnits.filter(v => pickupBranchId && getVehicleBranchId(v) === pickupBranchId);
+  const selectedVehicle = vehicleUnits.find(v => v._id === selectedVehicleId) || null;
+
+  const step1Valid = () => {
+    if (!custName.trim() || !custPhone.trim() || !custEmail.trim()) return false;
+    if (!isWalkIn) {
+      if (!selectedUserId) return false;
+      if (profileLoading) return false;
+      if (profileNotFound && !proceedWithoutProfile) return false;
+    }
+    return true;
+  };
+  const step2Valid = () => !!(pickupBranchId && selectedVehicleId);
+  const step3Valid = () => !!(dropoffBranchId && pickupAt && dropoffAt && totalAmount && parseFloat(totalAmount) > 0);
+
+  const handleCreateReservation = async () => {
+    if (!selectedVehicle) return;
+    setPanelSubmitting(true);
+    try {
+      let vmId = "";
+      const vm = selectedVehicle.vehicle_model_id;
+      if (vm) vmId = typeof vm === "object" ? (vm as IVehicleModelSummary)._id : (vm as string);
+
+      const days = Math.max(1, Math.ceil((new Date(dropoffAt).getTime() - new Date(pickupAt).getTime()) / 86400000));
+      const grandTotal = parseFloat(totalAmount) || 0;
+      const unitAmount = (grandTotal / days).toFixed(2);
+
+      const payload: CreateReservationPayload = {
+        vehicle_id: selectedVehicle._id,
+        vehicle_model_id: vmId,
+        pickup:  { branch_id: pickupBranchId,  at: new Date(pickupAt).toISOString() },
+        dropoff: { branch_id: dropoffBranchId, at: new Date(dropoffAt).toISOString() },
+        user_id: isWalkIn ? null : (selectedUserId || null),
+        created_channel: "web",
+        pricing: {
+          currency: pricingCurrency,
+          breakdown: [{
+            label: "Daily rental rate",
+            quantity: days,
+            unit_amount: unitAmount as any,
+            total: grandTotal.toFixed(2) as any,
+          }],
+          grand_total: grandTotal.toFixed(2) as any,
+          computed_at: new Date().toISOString(),
+        },
+        driver_snapshot: {
+          full_name: custName, phone: custPhone, email: custEmail,
+          driver_license: {
+            number:     licNumber  || "N/A",
+            country:    licCountry || "ZW",
+            class:      licClass   || "4",
+            expires_at: licExpiry ? new Date(licExpiry).toISOString() : new Date(Date.now() + 365 * 86400000).toISOString(),
+            verified:   licVerified,
+          },
+        },
+        notes: reservationNotes || undefined,
+      };
+
+      await createReservation(payload);
+      dispatch(fetchReservations());
+      showSnackbar("Reservation created successfully", "success");
+      setPanelOpen(false);
+      resetPanel();
+    } catch (e: any) {
+      showSnackbar(e?.message || "Failed to create reservation", "error");
+    } finally {
+      setPanelSubmitting(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      pending: "bg-amber-100 text-amber-800 border-amber-200",
-      confirmed: "bg-blue-100 text-blue-800 border-blue-200",
-      active: "bg-cyan-100 text-cyan-800 border-cyan-200",
-      completed: "bg-emerald-100 text-emerald-800 border-emerald-200",
-      cancelled: "bg-rose-100 text-rose-800 border-rose-200"
+      pending:     "bg-amber-100 text-amber-800 border-amber-200",
+      confirmed:   "bg-blue-100 text-blue-800 border-blue-200",
+      checked_out: "bg-indigo-100 text-indigo-800 border-indigo-200",
+      checked_in:  "bg-cyan-100 text-cyan-800 border-cyan-200",
+      returned:    "bg-cyan-100 text-cyan-800 border-cyan-200",
+      closed:      "bg-emerald-100 text-emerald-800 border-emerald-200",
+      completed:   "bg-emerald-100 text-emerald-800 border-emerald-200",
+      cancelled:   "bg-rose-100 text-rose-800 border-rose-200",
+      no_show:     "bg-gray-100 text-gray-800 border-gray-200",
     };
     return colors[status.toLowerCase()] || "bg-gray-100 text-gray-800 border-gray-200";
   };
@@ -509,7 +745,13 @@ const ReservationsPage: React.FC = () => {
                 <p className="text-sm text-gray-600 mt-1">Manage and track all vehicle reservations</p>
               </div>
             </div>
-           
+            <button
+              onClick={() => navigate("/staff/create-reservation")}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#0A1628] to-[#1A5FA8] text-white rounded-xl hover:opacity-90 font-semibold text-sm shadow-sm transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              New Reservation
+            </button>
           </div>
         </div>
 
@@ -577,18 +819,26 @@ const ReservationsPage: React.FC = () => {
                     className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent transition-all"
                   />
                 </div>
-                <div className="hidden sm:flex gap-2">
-                  {['all', 'pending', 'confirmed', 'active', 'completed', 'cancelled'].map((tab) => (
+                <div className="hidden sm:flex gap-2 flex-wrap">
+                  {[
+                    { value: 'all', label: 'All' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'confirmed', label: 'Confirmed' },
+                    { value: 'checked_out', label: 'Checked Out' },
+                    { value: 'checked_in', label: 'Checked In' },
+                    { value: 'closed', label: 'Completed' },
+                    { value: 'cancelled', label: 'Cancelled' },
+                  ].map(({ value, label }) => (
                     <button
-                      key={tab}
-                      onClick={() => setSelectedTab(tab)}
+                      key={value}
+                      onClick={() => setSelectedTab(value)}
                       className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
-                        selectedTab === tab
+                        selectedTab === value
                           ? 'bg-[#1EA2E4] text-white shadow-lg'
                           : 'bg-gray-100 text-gray-700 hover:shadow-md'
                       }`}
                     >
-                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -1111,20 +1361,28 @@ const ReservationsPage: React.FC = () => {
               </button>
             </div>
             <div className="space-y-2">
-              {["all", "pending", "confirmed", "active", "completed", "cancelled"].map((status) => (
+              {[
+                { value: 'all', label: 'All' },
+                { value: 'pending', label: 'Pending' },
+                { value: 'confirmed', label: 'Confirmed' },
+                { value: 'checked_out', label: 'Checked Out' },
+                { value: 'checked_in', label: 'Checked In' },
+                { value: 'closed', label: 'Completed' },
+                { value: 'cancelled', label: 'Cancelled' },
+              ].map(({ value, label }) => (
                 <button
-                  key={status}
+                  key={value}
                   onClick={() => {
-                    setSelectedTab(status);
+                    setSelectedTab(value);
                     setShowMobileFilters(false);
                   }}
                   className={`w-full px-4 py-3 rounded-xl text-left font-medium transition-colors ${
-                    selectedTab === status
+                    selectedTab === value
                       ? "bg-[#1EA2E4] text-white"
                       : "bg-gray-100 text-gray-700"
                   }`}
                 >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  {label}
                 </button>
               ))}
             </div>
@@ -1185,9 +1443,11 @@ const ReservationsPage: React.FC = () => {
                         <select value={editFormData.status || "pending"} onChange={(e) => setEditFormData({...editFormData, status: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]">
                           <option value="pending">Pending</option>
                           <option value="confirmed">Confirmed</option>
-                          <option value="active">Active</option>
-                          <option value="completed">Completed</option>
+                          <option value="checked_out">Checked Out</option>
+                          <option value="checked_in">Checked In</option>
+                          <option value="closed">Completed</option>
                           <option value="cancelled">Cancelled</option>
+                          <option value="no_show">No Show</option>
                         </select>
                       </div>
                       <div>
@@ -1425,6 +1685,404 @@ const ReservationsPage: React.FC = () => {
                 <button onClick={() => setShowStatusModal(false)} disabled={isUpdatingStatus} className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50">Cancel</button>
                 <button onClick={handleConfirmStatusUpdate} disabled={isUpdatingStatus || selectedNewStatus === selectedStatusReservation.status} className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                   {isUpdatingStatus ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Updating...</> : "Update Status"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Create Reservation Panel ── */}
+      {panelOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !panelSubmitting && setPanelOpen(false)} />
+          <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
+            <div className="relative w-screen max-w-lg bg-white shadow-2xl flex flex-col h-full">
+              {/* Header */}
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800">New Reservation</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Step {panelStep} of 3 — {panelStep === 1 ? "Customer" : panelStep === 2 ? "Vehicle" : "Dates & Notes"}</p>
+                </div>
+                <button onClick={() => !panelSubmitting && setPanelOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+
+              {/* Step indicators */}
+              <div className="px-6 pt-4 pb-2 flex items-center gap-2">
+                {[1,2,3].map(s => (
+                  <div key={s} className={`flex-1 h-1.5 rounded-full transition-all ${panelStep >= s ? "bg-[#1EA2E4]" : "bg-gray-200"}`} />
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+                {/* ── Step 1: Customer ── */}
+                {panelStep === 1 && (
+                  <>
+                    {/* Walk-in / Registered toggle */}
+                    <div className="flex gap-3">
+                      {[{v: true, label: "Walk-in"}, {v: false, label: "Registered Customer"}].map(opt => (
+                        <button
+                          key={String(opt.v)}
+                          onClick={() => {
+                            setIsWalkIn(opt.v);
+                            setSelectedUserId(""); setUserSearch("");
+                            setCustomerProfile(null); setProfileNotFound(false); setProceedWithoutProfile(false);
+                            setCustName(""); setCustPhone(""); setCustEmail("");
+                            setLicNumber(""); setLicClass(""); setLicCountry("ZW"); setLicExpiry(""); setLicVerified(false);
+                          }}
+                          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${isWalkIn === opt.v ? "border-[#1EA2E4] bg-[#1EA2E4]/5 text-[#1EA2E4]" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* ── Registered Customer flow ── */}
+                    {!isWalkIn && (
+                      <>
+                        <div>
+                          <div ref={userDropRef} className="relative">
+                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Search Customer</label>
+                            <div className="relative">
+                              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                              <input
+                                type="text"
+                                placeholder="Name, email or phone..."
+                                value={userSearch}
+                                onChange={e => { setUserSearch(e.target.value); setUserDropOpen(true); setSelectedUserId(""); setCustomerProfile(null); setProfileNotFound(false); setProceedWithoutProfile(false); }}
+                                onFocus={() => setUserDropOpen(true)}
+                                className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]"
+                              />
+                            </div>
+                            {userDropOpen && (
+                              <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                                {usersLoading ? (
+                                  <div className="py-4 text-center text-sm text-gray-400">Loading...</div>
+                                ) : filteredUsers.length === 0 ? (
+                                  <div className="py-4 text-center text-sm text-gray-400">No customers found</div>
+                                ) : filteredUsers.map(u => (
+                                  <button key={u._id} onClick={() => selectUser(u)} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 flex flex-col transition-colors">
+                                    <span className="text-sm font-medium text-gray-800">{u.full_name}</span>
+                                    <span className="text-xs text-gray-500">{u.email}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setPanelOpen(false); navigate("/manager-users"); }}
+                            className="mt-2 text-xs text-[#1EA2E4] hover:underline font-medium flex items-center gap-1"
+                          >
+                            <Plus className="w-3 h-3" /> New customer? Add them first →
+                          </button>
+                        </div>
+
+                        {/* Profile loading indicator */}
+                        {selectedUserId && profileLoading && (
+                          <div className="flex items-center gap-2 py-3 text-sm text-gray-500">
+                            <div className="w-4 h-4 border-2 border-[#1EA2E4] border-t-transparent rounded-full animate-spin" />
+                            Loading customer profile...
+                          </div>
+                        )}
+
+                        {/* No profile warning */}
+                        {selectedUserId && !profileLoading && profileNotFound && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-sm font-semibold text-amber-800">No customer profile found</p>
+                                <p className="text-xs text-amber-700 mt-0.5">
+                                  <span className="font-medium">{custName}</span> doesn't have a customer profile yet. Driver's licence information won't be available. You can still proceed or add their profile first.
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setProceedWithoutProfile(true)}
+                                className="flex-1 py-2 text-xs font-semibold bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg transition-colors"
+                              >
+                                Proceed without profile
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setPanelOpen(false); navigate("/manager-users"); }}
+                                className="flex-1 py-2 text-xs font-semibold bg-white border border-amber-300 hover:bg-amber-50 text-amber-700 rounded-lg transition-colors"
+                              >
+                                Add profile first
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Proceed-without-profile confirmation chip */}
+                        {selectedUserId && !profileLoading && profileNotFound && proceedWithoutProfile && (
+                          <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                            Proceeding without customer profile — no licence info will be captured.
+                          </div>
+                        )}
+
+                        {/* Customer profile card (auto-populated) */}
+                        {selectedUserId && !profileLoading && customerProfile && (
+                          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+                            <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Customer Profile (auto-populated)</p>
+                            <div className="space-y-1.5 text-sm text-gray-700">
+                              <div className="flex items-center gap-2">
+                                <User className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                                <span className="font-medium">{custName}</span>
+                              </div>
+                              {custEmail && (
+                                <div className="flex items-center gap-2 text-gray-600">
+                                  <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                  <span>{custEmail}</span>
+                                </div>
+                              )}
+                              {custPhone && (
+                                <div className="flex items-center gap-2 text-gray-600">
+                                  <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                                  <span>{custPhone}</span>
+                                </div>
+                              )}
+                            </div>
+                            {customerProfile.driver_license ? (
+                              <div className="border-t border-emerald-200 pt-3 space-y-1">
+                                <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide flex items-center gap-1">
+                                  <CreditCard className="w-3.5 h-3.5" /> Driver's Licence
+                                  {licVerified && <span className="ml-1 text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full text-xs">Verified</span>}
+                                </p>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 mt-1">
+                                  {licNumber && <span><span className="font-medium text-gray-700">No.</span> {licNumber}</span>}
+                                  {licClass && <span><span className="font-medium text-gray-700">Class</span> {licClass}</span>}
+                                  {licCountry && <span><span className="font-medium text-gray-700">Country</span> {licCountry}</span>}
+                                  {licExpiry && <span><span className="font-medium text-gray-700">Expires</span> {licExpiry}</span>}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="border-t border-amber-200 pt-2 flex items-center gap-1.5 text-xs text-amber-700">
+                                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                                No driver's licence on file for this customer.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* ── Walk-in flow: manual customer details ── */}
+                    {isWalkIn && (
+                      <>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="col-span-2">
+                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Full Name *</label>
+                            <input type="text" placeholder="John Doe" value={custName} onChange={e => setCustName(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Phone *</label>
+                            <input type="text" placeholder="+263..." value={custPhone} onChange={e => setCustPhone(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Email *</label>
+                            <input type="email" placeholder="john@example.com" value={custEmail} onChange={e => setCustEmail(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]" />
+                          </div>
+                        </div>
+                        <div className="border-t border-gray-100 pt-4">
+                          <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Driver's Licence</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Licence No.</label>
+                              <input type="text" placeholder="e.g. ZW123456" value={licNumber} onChange={e => setLicNumber(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Class</label>
+                              <input type="text" placeholder="e.g. 4" value={licClass} onChange={e => setLicClass(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Country</label>
+                              <input type="text" value={licCountry} onChange={e => setLicCountry(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Expiry</label>
+                              <input type="date" value={licExpiry} onChange={e => setLicExpiry(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]" />
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {/* ── Step 2: Vehicle ── */}
+                {panelStep === 2 && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1.5">Pickup Branch *</label>
+                      <select value={pickupBranchId} onChange={e => { setPickupBranchId(e.target.value); setSelectedVehicleId(""); }} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4] appearance-none bg-white">
+                        <option value="">Select branch...</option>
+                        {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                      </select>
+                    </div>
+
+                    {pickupBranchId && (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Vehicle *</label>
+                        {vehiclesForBranch.length === 0 ? (
+                          <div className="py-6 text-center text-sm text-gray-400 border border-dashed border-gray-200 rounded-xl">
+                            No available vehicles at this branch
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {vehiclesForBranch.map(v => (
+                              <button
+                                key={v._id}
+                                onClick={() => setSelectedVehicleId(v._id)}
+                                className={`w-full text-left p-3 border-2 rounded-xl transition-all ${selectedVehicleId === v._id ? "border-[#1EA2E4] bg-[#1EA2E4]/5" : "border-gray-200 hover:border-gray-300"}`}
+                              >
+                                <p className="text-sm font-semibold text-gray-800">{getVehicleLabel(v)}</p>
+                                <div className="flex items-center gap-3 mt-1">
+                                  <span className="text-xs text-gray-500">{v.color}</span>
+                                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${v.availability_state === "available" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                    {v.availability_state || "available"}
+                                  </span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* ── Step 3: Dates & Pricing ── */}
+                {panelStep === 3 && (
+                  <>
+                    {/* Customer details card for registered customers */}
+                    {!isWalkIn && selectedUserId && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1.5">
+                        <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Customer Details</p>
+                        <div className="flex items-center gap-2 text-sm text-gray-700">
+                          <User className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                          <span className="font-medium">{custName}</span>
+                        </div>
+                        {custEmail && (
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <Mail className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                            <span>{custEmail}</span>
+                          </div>
+                        )}
+                        {custPhone && (
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <Phone className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                            <span>{custPhone}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Pickup Date & Time *</label>
+                        <input type="datetime-local" value={pickupAt} onChange={e => setPickupAt(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Dropoff Branch *</label>
+                        <select value={dropoffBranchId} onChange={e => setDropoffBranchId(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4] appearance-none bg-white">
+                          <option value="">Select branch...</option>
+                          {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Dropoff Date & Time *</label>
+                        <input type="datetime-local" value={dropoffAt} min={pickupAt} onChange={e => setDropoffAt(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]" />
+                      </div>
+                      {/* Pricing */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-2">
+                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Total Amount *</label>
+                          <div className="relative">
+                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={totalAmount}
+                              onChange={e => setTotalAmount(e.target.value)}
+                              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4]"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Currency</label>
+                          <select value={pricingCurrency} onChange={e => setPricingCurrency(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4] appearance-none bg-white">
+                            <option value="USD">USD</option>
+                            <option value="ZWL">ZWL</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Notes (optional)</label>
+                        <textarea rows={2} placeholder="Any special requests or notes..." value={reservationNotes} onChange={e => setReservationNotes(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1EA2E4]/30 focus:border-[#1EA2E4] resize-none" />
+                      </div>
+                    </div>
+
+                    {/* Summary */}
+                    {selectedVehicle && pickupAt && dropoffAt && (
+                      <div className="bg-[#F0F6FF] rounded-xl p-4 space-y-2 text-sm">
+                        <p className="font-semibold text-gray-700">Booking Summary</p>
+                        <div className="flex justify-between text-gray-600">
+                          <span>Customer</span>
+                          <span className="font-medium text-gray-800">{custName}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-600">
+                          <span>Vehicle</span>
+                          <span className="font-medium text-gray-800">{getVehicleLabel(selectedVehicle)}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-600">
+                          <span>Duration</span>
+                          <span className="font-medium text-gray-800">
+                            {Math.max(1, Math.ceil((new Date(dropoffAt).getTime() - new Date(pickupAt).getTime()) / 86400000))} day(s)
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-gray-600">
+                          <span>Type</span>
+                          <span className={`font-medium ${isWalkIn ? "text-amber-600" : "text-emerald-600"}`}>{isWalkIn ? "Walk-in" : "Registered"}</span>
+                        </div>
+                        {totalAmount && parseFloat(totalAmount) > 0 && (
+                          <div className="flex justify-between text-gray-700 font-semibold border-t border-blue-200 pt-2 mt-1">
+                            <span>Total</span>
+                            <span className="text-[#1EA2E4]">{pricingCurrency} {parseFloat(totalAmount).toFixed(2)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex gap-3">
+                {panelStep > 1 && (
+                  <button onClick={() => setPanelStep(s => s - 1)} disabled={panelSubmitting} className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-medium text-sm transition-colors disabled:opacity-50">
+                    Back
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (panelStep < 3) { setPanelStep(s => s + 1); }
+                    else { handleCreateReservation(); }
+                  }}
+                  disabled={panelSubmitting || (panelStep === 1 && !step1Valid()) || (panelStep === 2 && !step2Valid()) || (panelStep === 3 && !step3Valid())}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-[#0A1628] to-[#1A5FA8] text-white rounded-xl hover:opacity-90 font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {panelSubmitting ? (
+                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Creating...</>
+                  ) : panelStep < 3 ? "Next →" : "Create Reservation"}
                 </button>
               </div>
             </div>

@@ -1,11 +1,6 @@
 import axios from "axios";
 
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = "https://hfbudnmvjbzvpefvtiuu.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYnVkbm12amJ6dnBlZnZ0aXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczOTE2NTgsImV4cCI6MjA2Mjk2NzY1OH0.ionCach1O5vekQDoP7Bx6pSVaLXduJN9kYbWwlaRzKk";
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from "../../helpers/supa_base_client";
 
 // Sanitize filename helper
 const sanitizeFilename = (filename: string): string => {
@@ -255,7 +250,7 @@ const DriverProfileService = {
   getDriverProfileById: async (driverId: string): Promise<DriverProfileResponse> => {
     try {
       const token = getAuthToken();
-      const response = await axios.get<DriverProfileResponse>(`${BASE_URL}/api/v1/drivers/${driverId}`, {
+      const response = await axios.get<DriverProfileResponse>(`${BASE_URL}/${driverId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       return response.data;

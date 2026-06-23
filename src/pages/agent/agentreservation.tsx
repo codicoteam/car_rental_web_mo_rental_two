@@ -1,7 +1,8 @@
 // src/pages/Reservation.tsx
 import { useState, useEffect } from 'react';
-import { Clock, Search, Menu, Phone, Mail, AlertCircle, Filter, X, Eye, User, Car, CreditCard, FileText, CalendarDays, Tag, Gauge, Shield, Image } from 'lucide-react';
+import { Clock, Search, Menu, Phone, Mail, AlertCircle, Filter, X, Eye, User, Car, CreditCard, FileText, CalendarDays, Tag, Gauge, Shield, Image, Plus } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from '../../components/agentsidebar';
 import { fetchReservations } from '../../features/reservation/reservationthunks';
 import { selectReservations, selectReservationsLoading, selectReservationsError } from '../../features/reservation/reservationSelectors';
@@ -130,6 +131,7 @@ interface TransformedReservation {
 }
 
 const AgentReservation = () => {
+  const navigate = useNavigate();
   const dispatch = useDispatch<AppDispatch>();
   const apiResponse = useSelector(selectReservations);
   const isLoading = useSelector(selectReservationsLoading);
@@ -290,13 +292,12 @@ const AgentReservation = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="text-right hidden sm:block">
-                  <p className="text-sm font-bold text-slate-800">John Doe</p>
-                  <p className="text-xs text-slate-500">Customer</p>
-                </div>
-                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-r from-blue-700 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <span className="text-white font-bold text-sm">JD</span>
-                </div>
+                <button
+                  onClick={() => navigate("/staff/create-reservation")}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-700 to-cyan-500 text-white rounded-xl hover:opacity-90 font-bold text-sm shadow-lg transition-all"
+                >
+                  <Plus className="w-4 h-4" /> New Reservation
+                </button>
               </div>
             </div>
           </div>

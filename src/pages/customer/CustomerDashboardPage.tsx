@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { 
-  ChevronRight, MapPin, Menu, Bell, Users, Car as CarIcon, 
-  Calendar, CheckCircle, AlertCircle, X, Award, Star, 
+import {
+  ChevronRight, MapPin, Menu, Bell, Users, Car as CarIcon,
+  Calendar, CheckCircle, AlertCircle, X, Award, Star,
   Globe, Briefcase, CheckCircle as CheckCircleIcon,
+  ShieldAlert, ShieldCheck, ClipboardList,
   type LucideIcon
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -98,6 +99,9 @@ interface StatCard {
 const Dashboardy = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [kycStatus, setKycStatus] = useState<string | null>(null);
+  const [kycRejectionReason, setKycRejectionReason] = useState<string | null>(null);
+  const [kycBannerDismissed, setKycBannerDismissed] = useState(false);
   const [showBookingDrawer, setShowBookingDrawer] = useState(false);
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [bookingDrawerData, setBookingDrawerData] = useState<BookingDrawerData | null>(null);
@@ -119,6 +123,27 @@ const Dashboardy = () => {
     dispatch(fetchDrivers());
     dispatch(fetchReservations());
   }, [dispatch]);
+
+  useEffect(() => {
+    const API_BASE = import.meta.env?.VITE_API_BASE_URL || "http://13.61.185.238:5050/api/v1";
+    const fetchKycStatus = async () => {
+      try {
+        const raw = localStorage.getItem("car_rental_auth");
+        const token = raw ? JSON.parse(raw)?.token : null;
+        if (!token) return;
+        const res = await fetch(`${API_BASE}/profiles/me/customer`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 404) { setKycStatus("no_profile"); return; }
+        if (!res.ok) return;
+        const body = await res.json();
+        const profile = body?.data;
+        setKycStatus(profile?.kyc_status || "not_submitted");
+        setKycRejectionReason(profile?.kyc_rejection_reason || null);
+      } catch { /* silently ignore */ }
+    };
+    fetchKycStatus();
+  }, []);
 
   useEffect(() => {
     if (selectedDriver) {
@@ -559,6 +584,54 @@ const Dashboardy = () => {
               <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome back, John!</h2>
               <p className="text-gray-600 text-lg">Here's what's happening with your bookings today</p>
             </div>
+
+            {/* ── KYC status banner ───────────────────────────────── */}
+            {!kycBannerDismissed && kycStatus && kycStatus !== "verified" && (
+              <div className={`mb-6 flex items-start gap-4 p-4 rounded-2xl border ${
+                kycStatus === "rejected"
+                  ? "bg-red-50 border-red-200 text-red-800"
+                  : kycStatus === "pending"
+                  ? "bg-amber-50 border-amber-200 text-amber-800"
+                  : "bg-blue-50 border-blue-200 text-blue-800"
+              }`}>
+                {kycStatus === "rejected"
+                  ? <ShieldAlert className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                  : kycStatus === "pending"
+                  ? <ClipboardList className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                  : <ShieldCheck className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                }
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm">
+                    {kycStatus === "no_profile" || kycStatus === "not_submitted"
+                      ? "Finish setting up your profile"
+                      : kycStatus === "pending"
+                      ? "Your profile is under review"
+                      : "Your profile needs attention"}
+                  </p>
+                  <p className="text-xs mt-0.5 opacity-80">
+                    {kycStatus === "no_profile" || kycStatus === "not_submitted"
+                      ? "Complete your profile and upload ID documents so our team can verify your account."
+                      : kycStatus === "pending"
+                      ? "We're reviewing your documents. This usually takes 24–48 hours."
+                      : kycStatus === "rejected"
+                      ? `Profile rejected${kycRejectionReason ? `: ${kycRejectionReason}` : ""}. Please contact reception via chat for assistance.`
+                      : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {(kycStatus === "no_profile" || kycStatus === "not_submitted") && (
+                    <a href="/customer-profile"
+                      className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors">
+                      Complete Now
+                    </a>
+                  )}
+                  <button onClick={() => setKycBannerDismissed(true)}
+                    className="p-1 rounded-lg hover:bg-black/10 transition-colors opacity-60 hover:opacity-100">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               {statCards.map((stat, idx) => {

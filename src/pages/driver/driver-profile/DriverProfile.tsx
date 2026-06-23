@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { ZIM_CITIES, ZIM_CITY_TO_PROVINCE } from "../../../utils/constants";
 import DriverSidebar from "../../../components/DriverSideBar";
 import DriverProfileService, { 
   type DriverProfile, 
@@ -267,7 +268,7 @@ const handleCreateProfile = async () => {
     setUploadProgress(0);
     
     // Validate required fields
-    if (!formData.display_name || !formData.base_city || !formData.base_country) {
+    if (!formData.display_name || !formData.base_city) {
       showSnackbar("Please fill in all required fields", "error");
       return;
     }
@@ -279,8 +280,8 @@ const handleCreateProfile = async () => {
     const payload: CreateDriverProfilePayload = {
       display_name: formData.display_name || "",
       base_city: formData.base_city || "",
-      base_region: formData.base_region || "", // Ensure string, not undefined
-      base_country: formData.base_country || "Zimbabwe",
+      base_region: ZIM_CITY_TO_PROVINCE[formData.base_city || ""] ?? "",
+      base_country: "Zimbabwe",
       hourly_rate: formData.hourly_rate || 0,
       bio: formData.bio || "",
       years_experience: formData.years_experience || 0,
@@ -333,8 +334,8 @@ const handleCreateProfile = async () => {
       const payload: UpdateDriverProfilePayload = {
         display_name: formData.display_name,
         base_city: formData.base_city,
-        base_region: formData.base_region,
-        base_country: formData.base_country,
+        base_region: ZIM_CITY_TO_PROVINCE[formData.base_city ?? ""] ?? "",
+        base_country: "Zimbabwe",
         hourly_rate: formData.hourly_rate,
         bio: formData.bio,
         years_experience: formData.years_experience,
@@ -679,40 +680,21 @@ const handleCreateProfile = async () => {
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Base City *
+                      Base City / Town *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={formData.base_city || ""}
                       onChange={(e) => setFormData(prev => ({ ...prev, base_city: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                      placeholder="e.g., Harare"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Base Region
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.base_region || ""}
-                      onChange={(e) => setFormData(prev => ({ ...prev, base_region: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                      placeholder="e.g., Harare Province"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Base Country *
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.base_country || "Zimbabwe"}
-                      onChange={(e) => setFormData(prev => ({ ...prev, base_country: e.target.value }))}
-                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent"
-                    />
+                      className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent bg-white"
+                    >
+                      <option value="">Select city / town</option>
+                      {ZIM_CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    {formData.base_city && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Province: {ZIM_CITY_TO_PROVINCE[formData.base_city] ?? '—'} · Country: Zimbabwe
+                      </p>
+                    )}
                   </div>
                   
                   <div>
@@ -1108,7 +1090,7 @@ const handleCreateProfile = async () => {
                         </div>
                         <div className="flex items-center gap-1">
                           <MapPin className="w-4 h-4 text-gray-400" />
-                          <span className="text-gray-600">{profile.base_city}, {profile.base_country}</span>
+                          <span className="text-gray-600">{profile.base_city}, Zimbabwe</span>
                         </div>
                       </div>
                     </div>
@@ -1167,7 +1149,11 @@ const handleCreateProfile = async () => {
                     <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-500">Location</p>
-                      <p className="font-medium">{profile.base_city}, {profile.base_region}, {profile.base_country}</p>
+                      <p className="font-medium">
+                        {profile.base_city}
+                        {profile.base_city && `, ${ZIM_CITY_TO_PROVINCE[profile.base_city] ?? profile.base_region ?? ''}`}
+                        {', Zimbabwe'}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">

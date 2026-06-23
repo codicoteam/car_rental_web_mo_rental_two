@@ -6,21 +6,23 @@ import {
   LogOut,
   X,
   BarChart3,
+  MessageSquare,
+  Bell,
+  UserCircle,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import Logo from "../assets/Logo.png";
 
 const Sidebar = ({ isOpen = true, onClose = () => {} }) => {
   const sidebarItems = [
-    { icon: LayoutDashboard, label: "Agent Dashboard", path: "/agentdashboard" },
-    { icon: Car, label: "AgentVehicles", path: "/agent" },
-   { icon: User, label: "AgentDrivers", path: "/agentdriver" },
-    { icon: Calendar, label: "AgentReservations", path: "/agentreservations" },
-    { icon: User, label: "Customer", path: "/user" },
-    { icon: BarChart3, label: "AgentChart", path: "/agentchart" },
-     { icon: User, label: "Notification", path: "/agentnotification" },
-    { icon: User, label: "AgentProfile", path: "/agentprofile" },
-    //{ icon: LogOut, label: "Logout", path: "/logout" },
+    { icon: LayoutDashboard, label: "Dashboard", path: "/agentdashboard" },
+    { icon: Car, label: "Vehicles", path: "/agent" },
+    { icon: User, label: "Drivers", path: "/agentdriver" },
+    { icon: Calendar, label: "Reservations", path: "/agentreservations" },
+    { icon: User, label: "Customers", path: "/user" },
+    { icon: MessageSquare, label: "Chats", path: "/agentchart" },
+    { icon: Bell, label: "Notifications", path: "/agentnotification" },
+    { icon: UserCircle, label: "My Profile", path: "/agentprofile" },
   ];
 
   const currentYear = new Date().getFullYear();

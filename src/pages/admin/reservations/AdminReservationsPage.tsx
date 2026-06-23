@@ -1,1855 +1,1079 @@
-// src/pages/AdminReservationsPage.tsx
-import React, { useState, useEffect, useCallback } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import type { AppDispatch } from "../../../app/store";
-import { fetchReservations , removeReservation , updateStatus } from "../../../features/reservation/reservationthunks";
-import { reservationsService } from "../../../Services/reservations_service";
+// src/pages/admin/reservations/AdminReservationsPage.tsx
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../../../components/Sidebar";
 import {
-  Search,
-  Eye,
-  Plus,
-  Filter,
-  X,
-  AlertCircle,
-  CheckCircle,
-  MoreVertical,
-  Calendar,
-  Clock,
-  Car,
-  RefreshCw,
-  User,
-  CreditCard,
-  MapPin,
-  Phone,
-  Mail,
-  DollarSign,
-  Hash,
-  Tag,
-  Gauge,
-  AlertTriangle,
-  Building,
-  FileText,
-  Image as ImageIcon,
-   Edit,        // Add this
-  Trash2  
+  fetchAllReservations,
+  createReservation,
+  updateReservationStatus,
+  deleteReservation,
+  parseDecimalValue,
+  type IReservation,
+  type ReservationStatus,
+  type CreateReservationPayload,
+  type IBranchRef,
+  type IVehicleRef,
+} from "../../../Services/adminAndManager/reservations_service";
+import {
+  fetchBranches,
+  type IBranch,
+} from "../../../Services/adminAndManager/admin_branch_service";
+import {
+  fetchVehicleUnits,
+  type IVehicleUnit,
+  type IVehicleModelSummary,
+  type IBranchSummary,
+} from "../../../Services/adminAndManager/vehicle_units_services";
+import {
+  fetchAllUsers,
+  type IUser,
+} from "../../../Services/adminAndManager/admi_users_service";
+import {
+  Search, Plus, X, AlertCircle, CheckCircle, RefreshCw,
+  ChevronRight, Eye, Trash2, ArrowRight, Menu, Car, User,
+  Calendar, Building2, Loader2, UserCheck, Users, UserPlus,
+  Hash, MapPin, Clock, CreditCard, Banknote, Tag,
 } from "lucide-react";
 
-// Types based on your API response
-interface Reservation {
-  _id: string;
-  code: string;
-  status: string;
-  created_at: string;
-  pickup: {
-    branch_id: {
-      name: string;
-      address?: {
-        city?: string;
-      };
-    };
-    at: string;
-  };
-  dropoff: {
-    branch_id: {
-      name: string;
-      address?: {
-        city?: string;
-      };
-    };
-    at: string;
-  };
-  driver_snapshot: {
-    full_name: string;
-    phone: string;
-    email: string;
-    driver_license: {
-      number: string;
-      class: string;
-      expires_at: string;
-      verified: boolean;
-    };
-  };
-  vehicle_id: {
-    plate_number: string;
-    vin: string;
-    color: string;
-    odometer_km: number;
-    photos: string[];
-    metadata?: {
-      seats?: number;
-      doors?: number;
-      features?: string[];
-    };
-  };
-  vehicle_model_id: {
-    make: string;
-    model: string;
-    year: number;
-    class: string;
-  };
-  pricing: {
-    currency: string;
-    grand_total: { $numberDecimal: string };
-    breakdown: Array<{ label: string; quantity: number; total: { $numberDecimal: string } }>;
-  };
-  payment_summary: {
-    status: string;
-    paid_total: { $numberDecimal: string };
-    outstanding: { $numberDecimal: string };
-  };
+// ===== Status config =====
+const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+  pending:     { label: "Pending",     bg: "bg-amber-100",   text: "text-amber-700",   dot: "bg-amber-400" },
+  confirmed:   { label: "Confirmed",   bg: "bg-blue-100",    text: "text-blue-700",    dot: "bg-blue-500" },
+  checked_out: { label: "Checked Out", bg: "bg-indigo-100",  text: "text-indigo-700",  dot: "bg-indigo-500" },
+  checked_in:  { label: "Checked In",  bg: "bg-cyan-100",    text: "text-cyan-700",    dot: "bg-cyan-500" },
+  returned:    { label: "Checked In",  bg: "bg-cyan-100",    text: "text-cyan-700",    dot: "bg-cyan-500" },
+  closed:      { label: "Completed",   bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500" },
+  completed:   { label: "Completed",   bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500" },
+  cancelled:   { label: "Cancelled",   bg: "bg-red-100",     text: "text-red-600",     dot: "bg-red-400" },
+  no_show:     { label: "No Show",     bg: "bg-gray-100",    text: "text-gray-600",    dot: "bg-gray-400" },
+};
+
+const PAY_STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
+  unpaid:         { label: "Unpaid",    bg: "bg-red-50",     text: "text-red-600" },
+  partially_paid: { label: "Partial",   bg: "bg-amber-50",   text: "text-amber-600" },
+  paid:           { label: "Paid",      bg: "bg-emerald-50", text: "text-emerald-600" },
+  refunded:       { label: "Refunded",  bg: "bg-purple-50",  text: "text-purple-600" },
+  cancelled:      { label: "Cancelled", bg: "bg-gray-50",    text: "text-gray-500" },
+};
+
+const STATUS_TRANSITIONS: Record<ReservationStatus, ReservationStatus[]> = {
+  pending:     ["confirmed", "cancelled", "no_show"],
+  confirmed:   ["checked_out", "cancelled", "no_show"],
+  checked_out: ["checked_in"],
+  checked_in:  ["closed"],
+  returned:    ["closed"],
+  closed:      [],
+  completed:   [],
+  cancelled:   [],
+  no_show:     [],
+};
+
+// ===== Helpers =====
+function formatDate(s: string): string {
+  if (!s) return "—";
+  try { return new Date(s).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }); }
+  catch { return "—"; }
+}
+function formatDateTime(s: string): string {
+  if (!s) return "—";
+  try { return new Date(s).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
+  catch { return "—"; }
+}
+function getBranchName(b: string | IBranchRef | null): string {
+  if (!b) return "—";
+  return typeof b === "object" ? (b as IBranchRef).name || "—" : b;
+}
+function getVehicleLabel(r: IReservation): string {
+  const vm = r.vehicle_model_id;
+  if (!vm) return "Unknown";
+  if (typeof vm === "object") return `${(vm as any).make || ""} ${(vm as any).model || ""}`.trim() || "Unknown";
+  return "Unknown";
+}
+function getCustomerName(r: IReservation): string {
+  return r.driver_snapshot?.full_name || "Unknown";
+}
+function getCreatedByName(r: IReservation): string {
+  const cb = r.created_by;
+  if (!cb) return "";
+  if (typeof cb === "object") return (cb as any).full_name || (cb as any).email || "";
+  return "";
+}
+function isWalkInReservation(r: IReservation): boolean {
+  return !r.user_id;
+}
+function getVehicleBranchId(u: IVehicleUnit): string {
+  if (!u.branch_id) return "";
+  return typeof u.branch_id === "object" ? (u.branch_id as IBranchSummary)._id || "" : u.branch_id as string;
+}
+function getVehicleModelLabel(u: IVehicleUnit): string {
+  if (!u.vehicle_model_id) return u.plate_number;
+  if (typeof u.vehicle_model_id === "object") {
+    const m = u.vehicle_model_id as IVehicleModelSummary;
+    return `${m.make || ""} ${m.model || ""} (${m.year || ""})`.trim();
+  }
+  return u.plate_number;
 }
 
-const AdminReservationsPage: React.FC = () => {
-  const dispatch = useDispatch<AppDispatch>();
-  
-
-
-
-const apiResponse = useSelector(
-  (state: any) => state.reservations.reservations
-);
-
-const reservations: Reservation[] = apiResponse?.data || [];
-
-const loading = useSelector(
-  (state: any) => state.reservations?.isLoading
-);
-
-const error = useSelector(
-  (state: any) => state.reservations?.error
-);
-  
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+// ===== Main Component =====
+export default function AdminReservationsPage() {
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [reservationToDelete, setReservationToDelete] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
-  const [showStatusModal, setShowStatusModal] = useState(false);
-const [selectedStatusReservation, setSelectedStatusReservation] = useState<Reservation | null>(null);
-const [selectedNewStatus, setSelectedNewStatus] = useState("");
-const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-// Add these after your existing state declarations
-const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-const [selectedReservationForEdit, setSelectedReservationForEdit] = useState<Reservation | null>(null);
-const [editFormData, setEditFormData] = useState<any>(null);
-const [isUpdatingReservation, setIsUpdatingReservation] = useState(false);
+
+  // Data
+  const [reservations, setReservations] = useState<IReservation[]>([]);
+  const [branches, setBranches] = useState<IBranch[]>([]);
+  const [vehicleUnits, setVehicleUnits] = useState<IVehicleUnit[]>([]);
+  const [users, setUsers] = useState<IUser[]>([]);
+
+  // Loading
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Filters
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterBranch, setFilterBranch] = useState("");
+  const [filterPayStatus, setFilterPayStatus] = useState("");
+
+  // Status change modal
+  const [statusModalRes, setStatusModalRes] = useState<IReservation | null>(null);
+  const [statusChanging, setStatusChanging] = useState(false);
+
+  // Delete dialog
+  const [deleteTarget, setDeleteTarget] = useState<IReservation | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Snackbar
-  const [snackbar, setSnackbar] = useState<{
-    show: boolean;
-    message: string;
-    type: "success" | "error" | "info";
-  }>({ show: false, message: "", type: "info" });
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; type: "success" | "error" }>({ open: false, message: "", type: "success" });
+  function showSnack(message: string, type: "success" | "error") { setSnackbar({ open: true, message, type }); }
+
+  // Create panel
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [step, setStep] = useState(1);
+  const [panelSubmitting, setPanelSubmitting] = useState(false);
+
+  // Walk-in / user selection
+  const [isWalkIn, setIsWalkIn] = useState(true);
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userDropOpen, setUserDropOpen] = useState(false);
+  const userDropRef = useRef<HTMLDivElement>(null);
+
+  // Step 1 — driver snapshot
+  const [custName, setCustName] = useState("");
+  const [custPhone, setCustPhone] = useState("");
+  const [custEmail, setCustEmail] = useState("");
+  const [licNumber, setLicNumber] = useState("");
+  const [licClass, setLicClass] = useState("");
+  const [licCountry, setLicCountry] = useState("ZW");
+  const [licExpiry, setLicExpiry] = useState("");
+
+  // Step 2 — vehicle
+  const [pickupBranchId, setPickupBranchId] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+
+  // Step 3 — dates
+  const [dropoffBranchId, setDropoffBranchId] = useState("");
+  const [pickupAt, setPickupAt] = useState("");
+  const [dropoffAt, setDropoffAt] = useState("");
+  const [notes, setNotes] = useState("");
+
+  // ── Load data ──────────────────────────────────────────────────────────
+  const loadReservations = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetchAllReservations();
+      setReservations(res.data || []);
+    } catch (e: any) { setError(e?.message || "Failed to load reservations"); }
+    finally { setLoading(false); }
+  }, []);
 
   useEffect(() => {
-    dispatch(fetchReservations());
-  }, [dispatch]);
+    loadReservations();
+    fetchBranches().then(r => setBranches(r.data || [])).catch(() => {});
+    fetchVehicleUnits(1, 200).then(r => setVehicleUnits(r.data?.items || [])).catch(() => {});
+  }, [loadReservations]);
 
-  const showSnackbar = (message: string, type: "success" | "error" | "info") => {
-    setSnackbar({ show: true, message, type });
-    setTimeout(() => {
-      setSnackbar((prev) => ({ ...prev, show: false }));
-    }, 3000);
-  };
+  useEffect(() => {
+    if (snackbar.open) {
+      const t = setTimeout(() => setSnackbar(s => ({ ...s, open: false })), 3500);
+      return () => clearTimeout(t);
+    }
+  }, [snackbar.open]);
 
-  // Extract reservations array from API response
-  // const reservations: Reservation[] = apiResponse?.data || [];
-  
-
-  // Transform reservation for display
-  const transformReservation = (res: Reservation) => {
-    const pickupDate = new Date(res.pickup.at);
-    const dropoffDate = new Date(res.dropoff.at);
-    const durationDays = Math.ceil((dropoffDate.getTime() - pickupDate.getTime()) / (1000 * 60 * 60 * 24));
-    
-    const formatDate = (date: string) => {
-      return new Date(date).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric"
-      });
+  // Close user dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (userDropRef.current && !userDropRef.current.contains(e.target as Node)) setUserDropOpen(false);
     };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
-    const formatDateTime = (date: string) => {
-      return new Date(date).toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    };
+  // ── Stats ──────────────────────────────────────────────────────────────
+  const total     = reservations.length;
+  const pending   = reservations.filter(r => r.status === "pending").length;
+  const active    = reservations.filter(r => ["confirmed", "checked_out", "checked_in", "returned"].includes(r.status)).length;
+  const completed = reservations.filter(r => ["closed", "completed"].includes(r.status)).length;
 
-    const formatCurrency = (amount: string) => {
-      const num = parseFloat(amount);
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: res.pricing?.currency || "USD"
-      }).format(num || 0);
-    };
-
-    return {
-      id: res._id,
-      code: res.code,
-      customer: res.driver_snapshot?.full_name || "N/A",
-      email: res.driver_snapshot?.email || "N/A",
-      phone: res.driver_snapshot?.phone || "N/A",
-      vehicleName: `${res.vehicle_model_id?.make || ""} ${res.vehicle_model_id?.model || ""}`.trim(),
-      make: res.vehicle_model_id?.make || "N/A",
-      model: res.vehicle_model_id?.model || "N/A",
-      year: res.vehicle_model_id?.year || 0,
-      vehicleClass: res.vehicle_model_id?.class || "N/A",
-      plateNumber: res.vehicle_id?.plate_number || "N/A",
-      vin: res.vehicle_id?.vin || "N/A",
-      color: res.vehicle_id?.color || "N/A",
-      odometer: res.vehicle_id?.odometer_km?.toLocaleString() || "0",
-      photos: res.vehicle_id?.photos || [],
-      startDate: formatDate(res.pickup.at),
-      endDate: formatDate(res.dropoff.at),
-      startDateTime: res.pickup.at,
-      endDateTime: res.dropoff.at,
-      startFormatted: formatDateTime(res.pickup.at),
-      endFormatted: formatDateTime(res.dropoff.at),
-      status: res.status?.charAt(0).toUpperCase() + res.status?.slice(1) || "Pending",
-      rawStatus: res.status,
-      totalAmount: formatCurrency(res.pricing?.grand_total?.$numberDecimal || "0"),
-      pickupLocation: res.pickup.branch_id?.name || "N/A",
-      dropoffLocation: res.dropoff.branch_id?.name || "N/A",
-      duration: durationDays,
-      createdDate: formatDate(res.created_at),
-      paymentStatus: res.payment_summary?.status || "unpaid",
-      paidAmount: formatCurrency(res.payment_summary?.paid_total?.$numberDecimal || "0"),
-      outstandingAmount: formatCurrency(res.payment_summary?.outstanding?.$numberDecimal || "0"),
-      seats: res.vehicle_id?.metadata?.seats || 4,
-      doors: res.vehicle_id?.metadata?.doors || 4,
-      features: res.vehicle_id?.metadata?.features || [],
-      licenseClass: res.driver_snapshot?.driver_license?.class || "N/A",
-      licenseNumber: res.driver_snapshot?.driver_license?.number || "N/A",
-      licenseVerified: res.driver_snapshot?.driver_license?.verified || false,
-      pricingBreakdown: res.pricing?.breakdown || []
-    };
-  };
-
-  console.log("reservations:", reservations);
-console.log("type:", typeof reservations);
-console.log("isArray:", Array.isArray(reservations));
-
-  // Filter reservations
-  const filteredReservations = reservations.filter(res => {
-    const transformed = transformReservation(res);
-    const matchesSearch = searchTerm === "" ||
-      transformed.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transformed.vehicleName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transformed.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transformed.plateNumber.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === "all" || transformed.rawStatus === statusFilter;
-    
-    return matchesSearch && matchesStatus;
+  // ── Filters ────────────────────────────────────────────────────────────
+  const filtered = reservations.filter(r => {
+    const q = search.toLowerCase();
+    const plate = typeof r.vehicle_id === "object" && r.vehicle_id ? (r.vehicle_id as IVehicleRef).plate_number || "" : "";
+    const ms = !q || r.code?.toLowerCase().includes(q) || getCustomerName(r).toLowerCase().includes(q) || plate.toLowerCase().includes(q);
+    const mSt = !filterStatus || r.status === filterStatus ||
+      (filterStatus === "closed"     && r.status === "completed") ||
+      (filterStatus === "checked_in" && r.status === "returned");
+    const mBr = !filterBranch || getBranchName(r.pickup?.branch_id).includes(filterBranch) ||
+      (r.pickup?.branch_id != null && typeof r.pickup.branch_id === "object" && (r.pickup.branch_id as IBranchRef)._id === filterBranch);
+    const mPay = !filterPayStatus || r.payment_summary?.status === filterPayStatus;
+    return ms && mSt && mBr && mPay;
   });
 
-
-const handleDeleteReservation = async (reservationId: string) => {
-  setIsDeleting(true);
-  try {
-    await dispatch(removeReservation(reservationId)).unwrap();
-    showSnackbar("Reservation deleted successfully", "success");
-    setReservationToDelete(null);
-  } catch (err: any) {
-    showSnackbar(err.message || "Failed to delete reservation", "error");
+  // ── Status change ──────────────────────────────────────────────────────
+  async function handleStatusChange(newStatus: ReservationStatus) {
+    if (!statusModalRes) return;
+    setStatusChanging(true);
+    try {
+      const updated = await updateReservationStatus(statusModalRes._id, newStatus);
+      setReservations(prev => prev.map(r => r._id === updated._id ? { ...r, status: updated.status } : r));
+      showSnack(`Status updated to ${STATUS_CONFIG[newStatus]?.label || newStatus}`, "success");
+      setStatusModalRes(null);
+    } catch (e: any) { showSnack(e?.message || "Failed to update status", "error"); }
+    finally { setStatusChanging(false); }
   }
-  finally{
-    setIsDeleting(false)
+
+  // ── Delete ─────────────────────────────────────────────────────────────
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteReservation(deleteTarget._id);
+      setReservations(prev => prev.filter(r => r._id !== deleteTarget._id));
+      showSnack("Reservation deleted", "success");
+      setDeleteTarget(null);
+    } catch (e: any) { showSnack(e?.message || "Failed to delete", "error"); }
+    finally { setDeleting(false); }
   }
-};
 
-const openStatusModal = (reservation: Reservation) => {
-  setSelectedStatusReservation(reservation);
-  setSelectedNewStatus(reservation.status);
-  setShowStatusModal(true);
-};
-
-const handleConfirmStatusUpdate = async () => {
-  if (!selectedStatusReservation || !selectedNewStatus) return;
-  
-  setIsUpdatingStatus(true);
-  try {
-    await dispatch(updateStatus({ 
-      reservationId: selectedStatusReservation._id, 
-      status: selectedNewStatus 
-    })).unwrap();
-    showSnackbar(`Reservation status updated to ${selectedNewStatus}`, "success");
-    setShowStatusModal(false);
-    setSelectedStatusReservation(null);
-  } catch (err: any) {
-    showSnackbar(err.message || "Failed to update status", "error");
-  } finally {
-    setIsUpdatingStatus(false);
+  // ── Panel helpers ──────────────────────────────────────────────────────
+  function resetPanel() {
+    setStep(1);
+    setIsWalkIn(true);
+    setUserSearch(""); setSelectedUserId(""); setUserDropOpen(false);
+    setCustName(""); setCustPhone(""); setCustEmail("");
+    setLicNumber(""); setLicClass(""); setLicCountry("ZW"); setLicExpiry("");
+    setPickupBranchId(""); setSelectedVehicleId("");
+    setDropoffBranchId(""); setPickupAt(""); setDropoffAt(""); setNotes("");
+    setPanelSubmitting(false);
   }
-};
 
- // Add these after your existing handler functions
- const openEditModal = (reservation: Reservation) => {
-  setSelectedReservationForEdit(reservation);
-  
-  // Extract branch IDs properly from objects
-  const pickupBranchId = typeof reservation.pickup.branch_id === 'object' 
-    ? (reservation.pickup.branch_id as any)._id || (reservation.pickup.branch_id as any).id || ""
-    : reservation.pickup.branch_id;
-    
-  const dropoffBranchId = typeof reservation.dropoff.branch_id === 'object' 
-    ? (reservation.dropoff.branch_id as any)._id || (reservation.dropoff.branch_id as any).id || ""
-    : reservation.dropoff.branch_id;
-  
-  // Extract vehicle ID properly
-  const vehicleId = typeof reservation.vehicle_id === 'object' 
-    ? (reservation.vehicle_id as any)._id || (reservation.vehicle_id as any).id || ""
-    : reservation.vehicle_id;
-  
-  // Extract vehicle model ID properly
-  const vehicleModelId = typeof reservation.vehicle_model_id === 'object' 
-    ? (reservation.vehicle_model_id as any)._id || (reservation.vehicle_model_id as any).id || ""
-    : reservation.vehicle_model_id;
-  
-  // Set the reservation data directly as the form data with ALL fields
-  setEditFormData({
-    code: reservation.code,
-    user_id: (reservation as any).user_id || "",
-    created_by: (reservation as any).created_by || "",
-    created_channel: (reservation as any).created_channel || "web",
-    vehicle_id: vehicleId,
-    vehicle_model_id: vehicleModelId,
-    pickup: {
-      branch_id: pickupBranchId,
-      at: reservation.pickup.at
-    },
-    dropoff: {
-      branch_id: dropoffBranchId,
-      at: reservation.dropoff.at
-    },
-    status: reservation.status,
-    pricing: {
-      currency: (reservation.pricing as any)?.currency || "USD",
-      breakdown: (reservation.pricing as any)?.breakdown || [],
-      fees: (reservation.pricing as any)?.fees || [],
-      taxes: (reservation.pricing as any)?.taxes || [],
-      discounts: (reservation.pricing as any)?.discounts || [],
-      grand_total: (reservation.pricing as any)?.grand_total?.$numberDecimal || (reservation.pricing as any)?.grand_total || "0",
-      computed_at: (reservation.pricing as any)?.computed_at || new Date().toISOString()
-    },
-    payment_summary: {
-      status: (reservation.payment_summary as any)?.status || "unpaid",
-      paid_total: (reservation.payment_summary as any)?.paid_total?.$numberDecimal || (reservation.payment_summary as any)?.paid_total || "0",
-      outstanding: (reservation.payment_summary as any)?.outstanding?.$numberDecimal || (reservation.payment_summary as any)?.outstanding || "0",
-      last_payment_at: (reservation.payment_summary as any)?.last_payment_at || null
-    },
-    driver_snapshot: {
-      full_name: reservation.driver_snapshot?.full_name || "",
-      phone: reservation.driver_snapshot?.phone || "",
-      email: reservation.driver_snapshot?.email || "",
-      driver_license: {
-        number: reservation.driver_snapshot?.driver_license?.number || "",
-        country: (reservation.driver_snapshot?.driver_license as any)?.country || "ZW",
-        class: reservation.driver_snapshot?.driver_license?.class || "",
-        expires_at: reservation.driver_snapshot?.driver_license?.expires_at || "",
-        verified: reservation.driver_snapshot?.driver_license?.verified || false
-      }
-    },
-    notes: (reservation as any).notes || "",
-    created_at: (reservation as any).created_at || "",
-    updated_at: (reservation as any).updated_at || ""
-  });
-  
-  setIsEditModalOpen(true);
-};
-
-const handleEditFormChange = (section: string, field: string, value: any) => {
-  if (section === 'pickup' || section === 'dropoff') {
-    setEditFormData((prev: any) => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: value
-      }
-    }));
-  } else if (section === 'pricing') {
-    setEditFormData((prev: any) => ({
-      ...prev,
-      pricing: {
-        ...prev.pricing,
-        [field]: value
-      }
-    }));
-  } else if (section === 'driver_snapshot') {
-    setEditFormData((prev: any) => ({
-      ...prev,
-      driver_snapshot: {
-        ...prev.driver_snapshot,
-        [field]: value
-      }
-    }));
-  } else if (section === 'driver_license') {
-    setEditFormData((prev: any) => ({
-      ...prev,
-      driver_snapshot: {
-        ...prev.driver_snapshot,
-        driver_license: {
-          ...prev.driver_snapshot?.driver_license,
-          [field]: value
-        }
-      }
-    }));
-  } else {
-    setEditFormData((prev: any) => ({
-      ...prev,
-      [field]: value
-    }));
+  async function openPanel() {
+    resetPanel();
+    setPanelOpen(true);
+    // Load users for non-walk-in selection
+    if (users.length === 0) {
+      setUsersLoading(true);
+      try { const r = await fetchAllUsers(1, 300); setUsers(r.data?.users || []); }
+      catch { /* silent */ }
+      finally { setUsersLoading(false); }
+    }
   }
-};
 
-const handleUpdateReservation = async () => {
-  if (!selectedReservationForEdit || !editFormData) return;
-  
-  setIsUpdatingReservation(true);
-  try {
-    await reservationsService.updateReservation(selectedReservationForEdit._id, editFormData);
-    showSnackbar("Reservation updated successfully", "success");
-    setIsEditModalOpen(false);
-    dispatch(fetchReservations()); // Refresh the list
-  } catch (err: any) {
-    showSnackbar(err.message || "Failed to update reservation", "error");
-  } finally {
-    setIsUpdatingReservation(false);
+  function selectUser(u: IUser) {
+    setSelectedUserId(u._id);
+    setCustName(u.full_name || "");
+    setCustPhone(u.phone || "");
+    setCustEmail(u.email || "");
+    setUserSearch(u.full_name || u.email || "");
+    setUserDropOpen(false);
   }
-};
 
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      pending: "bg-amber-100 text-amber-800 border-amber-200",
-      confirmed: "bg-blue-100 text-blue-800 border-blue-200",
-      active: "bg-cyan-100 text-cyan-800 border-cyan-200",
-      completed: "bg-emerald-100 text-emerald-800 border-emerald-200",
-      cancelled: "bg-rose-100 text-rose-800 border-rose-200"
-    };
-    return colors[status.toLowerCase()] || "bg-gray-100 text-gray-800 border-gray-200";
-  };
+  const filteredUsers = users.filter(u => {
+    const q = userSearch.toLowerCase();
+    return !q || u.full_name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.phone?.toLowerCase().includes(q);
+  }).slice(0, 20);
 
-  const getPaymentStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      paid: "bg-emerald-100 text-emerald-800",
-      unpaid: "bg-rose-100 text-rose-800",
-      partial: "bg-amber-100 text-amber-800"
-    };
-    return colors[status.toLowerCase()] || "bg-gray-100 text-gray-800";
-  };
+  const vehiclesForBranch = vehicleUnits.filter(v => pickupBranchId && getVehicleBranchId(v) === pickupBranchId);
+  const selectedVehicle   = vehicleUnits.find(v => v._id === selectedVehicleId) || null;
 
-  const openViewModal = (reservation: Reservation) => {
-    setSelectedReservation(reservation);
-    setIsViewModalOpen(true);
-  };
+  function step1Valid() {
+    if (!isWalkIn && !selectedUserId) return false;
+    return !!(custName.trim() && custPhone.trim() && custEmail.trim());
+  }
+  function step2Valid() { return !!(pickupBranchId && selectedVehicleId); }
+  function step3Valid() { return !!(dropoffBranchId && pickupAt && dropoffAt); }
+
+  async function handleCreateReservation() {
+    if (!selectedVehicle) return;
+    setPanelSubmitting(true);
+    try {
+      let vmId = "";
+      const vm = selectedVehicle.vehicle_model_id;
+      if (vm) vmId = typeof vm === "object" ? (vm as IVehicleModelSummary)._id : vm as string;
+
+      const payload: CreateReservationPayload = {
+        vehicle_id: selectedVehicle._id,
+        vehicle_model_id: vmId,
+        pickup:  { branch_id: pickupBranchId,  at: new Date(pickupAt).toISOString() },
+        dropoff: { branch_id: dropoffBranchId, at: new Date(dropoffAt).toISOString() },
+        user_id: isWalkIn ? null : (selectedUserId || null),
+        created_channel: "web",
+        driver_snapshot: {
+          full_name: custName, phone: custPhone, email: custEmail,
+          driver_license: {
+            number:     licNumber  || "N/A",
+            country:    licCountry || "ZW",
+            class:      licClass   || "4",
+            expires_at: licExpiry ? new Date(licExpiry).toISOString() : new Date(Date.now() + 365 * 86400000).toISOString(),
+            verified:   false,
+          },
+        },
+        notes: notes || undefined,
+      };
+
+      const created = await createReservation(payload);
+      setReservations(prev => [created, ...prev]);
+      showSnack(`Reservation ${created.code} created successfully`, "success");
+      setPanelOpen(false);
+      resetPanel();
+    } catch (e: any) { showSnack(e?.message || "Failed to create reservation", "error"); }
+    finally { setPanelSubmitting(false); }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────
+  const inp = "w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF]/30 focus:border-[#00AEEF] transition-all bg-white text-gray-800";
+  const sel = inp + " appearance-none";
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
-      {/* Sidebar - Fixed */}
+    <div className="flex h-screen bg-[#F0F6FF] overflow-hidden font-sans">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header - Fixed */}
-        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="lg:hidden mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <MoreVertical className="w-5 h-5 text-gray-600" />
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* ── Top bar ── */}
+        <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4 sticky top-0 z-10 shadow-sm">
+          <button className="lg:hidden p-2 rounded-xl hover:bg-gray-100" onClick={() => setSidebarOpen(true)}>
+            <Menu className="w-5 h-5 text-gray-600" />
+          </button>
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-[#0A1628]">Reservations</h1>
+            <p className="text-xs text-gray-400 mt-0.5">{reservations.length} total reservations</p>
+          </div>
+          <button onClick={loadReservations} className="p-2.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-[#00AEEF] border border-gray-100 transition-colors" title="Refresh">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          <button onClick={() => navigate("/staff/create-reservation")}
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#0A1628] to-[#1A5FA8] text-white rounded-xl hover:opacity-90 font-medium text-sm shadow-sm transition-all">
+            <Plus className="w-4 h-4" /> New Reservation
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* ── Stats ── */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: "Total", value: total,     color: "text-[#0A1628]",    bg: "bg-white",       border: "border-gray-200" },
+              { label: "Pending",   value: pending,   color: "text-amber-600",   bg: "bg-amber-50",    border: "border-amber-200" },
+              { label: "Active",    value: active,    color: "text-blue-600",    bg: "bg-blue-50",     border: "border-blue-200" },
+              { label: "Completed", value: completed, color: "text-emerald-600", bg: "bg-emerald-50",  border: "border-emerald-200" },
+            ].map(s => (
+              <div key={s.label} className={`${s.bg} border ${s.border} rounded-2xl p-4 shadow-sm`}>
+                <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{s.label}</p>
+                <p className={`text-3xl font-bold mt-1 ${s.color}`}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* ── Filters ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input type="text" placeholder="Search code, customer, plate…"
+                  value={search} onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF]/30 focus:border-[#00AEEF] transition-all" />
+              </div>
+              {[
+                { value: filterStatus,    onChange: setFilterStatus,    options: (["pending","confirmed","checked_out","checked_in","closed","cancelled","no_show"] as const).map(k => ({ k, label: STATUS_CONFIG[k].label })), placeholder: "All Statuses" },
+                { value: filterBranch,    onChange: setFilterBranch,    options: branches.map(b => ({ k: b._id, label: b.name })),                          placeholder: "All Branches" },
+                { value: filterPayStatus, onChange: setFilterPayStatus, options: Object.entries(PAY_STATUS_CONFIG).map(([k,v]) => ({ k, label: v.label })), placeholder: "All Pay Status" },
+              ].map((f, i) => (
+                <div key={i} className="relative">
+                  <select value={f.value} onChange={e => f.onChange(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#00AEEF]/30 focus:border-[#00AEEF] text-gray-700">
+                    <option value="">{f.placeholder}</option>
+                    {f.options.map(o => <option key={o.k} value={o.k}>{o.label}</option>)}
+                  </select>
+                  <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none rotate-90" />
+                </div>
+              ))}
+            </div>
+            {(search || filterStatus || filterBranch || filterPayStatus) && (
+              <div className="flex items-center gap-2 mt-3">
+                <span className="text-xs text-gray-400">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+                <button onClick={() => { setSearch(""); setFilterStatus(""); setFilterBranch(""); setFilterPayStatus(""); }}
+                  className="text-xs text-[#00AEEF] hover:underline">Clear filters</button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Content ── */}
+          {loading ? (
+            <div className="flex items-center justify-center py-24">
+              <Loader2 className="w-10 h-10 text-[#00AEEF] animate-spin" />
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <p className="text-red-700 text-sm">{error}</p>
+              <button onClick={loadReservations} className="ml-auto text-sm text-red-600 underline">Retry</button>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center shadow-sm">
+              <Calendar className="w-14 h-14 text-gray-200 mx-auto mb-4" />
+              <p className="text-gray-500 font-semibold text-lg">No reservations found</p>
+              <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</p>
+              <button onClick={openPanel} className="mt-6 px-5 py-2.5 bg-gradient-to-r from-[#0A1628] to-[#1A5FA8] text-white rounded-xl text-sm font-medium">
+                Create First Reservation
               </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-800">Reservations Management</h1>
-                <p className="text-sm text-gray-600 mt-1">Manage and track all vehicle reservations</p>
-              </div>
             </div>
-            <div className="flex items-center gap-4">
-              {/* <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
-                Total: <span className="font-semibold">{reservations.length}</span> reservations
-              </div> */}
-              {/* <button
-                className="flex items-center gap-2 px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add Reservation</span>
-              </button> */}
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filtered.map(r => (
+                <ReservationCard key={r._id} reservation={r}
+                  onView={() => navigate(`/admin/reservation/${r._id}`)}
+                  onChangeStatus={() => setStatusModalRes(r)}
+                  onDelete={() => setDeleteTarget(r)} />
+              ))}
             </div>
-          </div>
+          )}
         </div>
+      </div>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto">
-          {/* Stats Overview */}
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Total Reservations</p>
-                    <p className="text-2xl font-bold text-gray-800">{reservations.length}</p>
-                  </div>
-                  <div className="p-2 bg-blue-50 rounded-lg">
-                    <Car className="w-6 h-6 text-[#1EA2E4]" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Pending</p>
-                    <p className="text-2xl font-bold text-amber-600">
-                      {reservations.filter(r => r.status === "pending").length}
-                    </p>
-                  </div>
-                  <div className="p-2 bg-amber-50 rounded-lg">
-                    <Clock className="w-6 h-6 text-amber-500" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Active</p>
-                    <p className="text-2xl font-bold text-cyan-600">
-                      {reservations.filter(r => r.status === "active").length}
-                    </p>
-                  </div>
-                  <div className="p-2 bg-cyan-50 rounded-lg">
-                    <Car className="w-6 h-6 text-cyan-500" />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Completed</p>
-                    <p className="text-2xl font-bold text-emerald-600">
-                      {reservations.filter(r => r.status === "completed").length}
-                    </p>
-                  </div>
-                  <div className="p-2 bg-emerald-50 rounded-lg">
-                    <CheckCircle className="w-6 h-6 text-emerald-500" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Filters & Search */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex flex-col lg:flex-row gap-4">
-                {/* Search */}
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search by customer, vehicle, or reservation code..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent transition-all"
-                    />
-                  </div>
-                </div>
-
-                {/* Filters */}
-                <div className="flex flex-wrap gap-3">
-                  <div className="relative">
-                    <select
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                      className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[140px]"
-                    >
-                      <option value="all">All Status</option>
-                      <option value="pending">Pending</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="active">Active</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                    <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Reservations Grid */}
-          <div className="px-6 pb-6">
-            {loading ? (
-              <div className="flex justify-center items-center h-64">
-                <div className="flex flex-col items-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1EA2E4] mb-4"></div>
-                  <p className="text-gray-600">Loading reservations...</p>
-                </div>
-              </div>
-            ) : error ? (
-              <div className="flex flex-col items-center justify-center h-64 p-6">
-                <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-                <p className="text-red-600 text-center mb-4">{error}</p>
-                <button
-                  onClick={() => dispatch(fetchReservations())}
-                  className="px-4 py-2 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors flex items-center gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Retry
-                </button>
-              </div>
-            ) : filteredReservations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 p-6">
-                <Car className="w-20 h-20 text-gray-300 mb-4" />
-                <p className="text-gray-500 text-lg mb-2">No reservations found</p>
-                <p className="text-gray-400 text-center mb-6">
-                  {searchTerm || statusFilter !== "all"
-                    ? "Try adjusting your filters or search terms"
-                    : "Get started by adding your first reservation"}
-                </p>
-              </div>
+      {/* ══════════════════════════════════════════════════════════════════════
+          STATUS CHANGE MODAL
+      ══════════════════════════════════════════════════════════════════════ */}
+      {statusModalRes && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setStatusModalRes(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <button onClick={() => setStatusModalRes(null)} className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-gray-100">
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+            <h3 className="text-lg font-bold text-[#0A1628] mb-1">Change Status</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              <span className="font-mono font-medium text-gray-700">{statusModalRes.code}</span>
+              {" · "}
+              <StatusBadge status={statusModalRes.status} />
+            </p>
+            {(STATUS_TRANSITIONS[statusModalRes.status as ReservationStatus] || []).length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-6">No status transitions available.</p>
             ) : (
-              <>
-                {/* Desktop Grid */}
-                <div className="hidden lg:block">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredReservations.map((reservation) => {
-                      const res = transformReservation(reservation);
-                      
-                      return (
-                       <div
-                                key={reservation._id}
-                                className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col"
-                              >
-                                {/* Vehicle Image */}
-                                {res.photos && res.photos.length > 0 && (
-                                  <div className="h-40 overflow-hidden">
-                                    <img
-                                      src={res.photos[0]}
-                                      alt={res.vehicleName}
-                                      className="w-full h-full object-cover"
-                                      onError={(e) => {
-                                        (e.target as HTMLImageElement).src = `https://via.placeholder.com/400x200/1EA2E4/ffffff?text=${encodeURIComponent(res.vehicleName)}`;
-                                      }}
-                                    />
-                                  </div>
-                                )}
-
-                                <div className="p-6 flex-1">
-                                  {/* Header */}
-                                  <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <h3 className="text-lg font-bold text-gray-900">
-                                          {res.vehicleName}
-                                        </h3>
-                                        <span
-                                          className={`px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(res.rawStatus)}`}
-                                        >
-                                          {res.status}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                                        <Hash className="w-4 h-4" />
-                                        <span className="font-mono">{res.code}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Customer */}
-                                  <div className="mb-4">
-                                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
-                                      <User className="w-4 h-4" />
-                                      <span className="font-medium">{res.customer}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                                      <Mail className="w-3 h-3" />
-                                      <span>{res.email}</span>
-                                    </div>
-                                  </div>
-
-                                  {/* Rental Period */}
-                                  <div className="space-y-2 mb-4">
-                                    <div className="flex items-center justify-between text-sm">
-                                      <div className="flex items-center gap-2 text-gray-600">
-                                        <Calendar className="w-4 h-4" />
-                                        <span>Pick-up</span>
-                                      </div>
-                                      <span className="font-medium text-gray-800">{res.startDate}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-sm">
-                                      <div className="flex items-center gap-2 text-gray-600">
-                                        <Calendar className="w-4 h-4" />
-                                        <span>Drop-off</span>
-                                      </div>
-                                      <span className="font-medium text-gray-800">{res.endDate}</span>
-                                    </div>
-                                  </div>
-
-                                  {/* Price and Payment */}
-                                  <div className="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-lg">
-                                    <div>
-                                      <p className="text-xs text-gray-500">Total Amount</p>
-                                      <p className="text-xl font-bold text-[#1EA2E4]">{res.totalAmount}</p>
-                                    </div>
-                                    <div className="text-right">
-                                      <p className="text-xs text-gray-500">Payment</p>
-                                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPaymentStatusColor(res.paymentStatus)}`}>
-                                        {res.paymentStatus.toUpperCase()}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  {/* Locations */}
-                                  <div className="space-y-2 text-sm text-gray-600">
-                                    <div className="flex items-center gap-2">
-                                      <MapPin className="w-3.5 h-3.5" />
-                                      <span className="truncate">{res.pickupLocation}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <MapPin className="w-3.5 h-3.5" />
-                                      <span className="truncate">{res.dropoffLocation}</span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Action Buttons at the bottom */}
-                                <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 flex justify-end gap-2">
-                                  <button
-                                    onClick={() => openStatusModal(reservation)}
-                                    className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                                    title="Update Status"
-                                  >
-                                     <RefreshCw className="w-4 h-4" />
-                                    
-                                  </button>
-                                  <button
-                                    onClick={() => openViewModal(reservation)}
-                                    className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                                    title="View Details"
-                                  >
-                                    <Eye className="w-4 h-4 text-gray-600" />
-                                  </button>
-                                  <button
-                                     onClick={() => openEditModal(reservation)}
-                                    className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors"
-                                    title="Edit Reservation"
-                                  >
-                                    <Edit className="w-4 h-4 text-blue-600" />
-                                  </button>
-                                  <button
-                                    onClick={() => setReservationToDelete(reservation._id)}
-                                    className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-red-50 transition-colors"
-                                    title="Delete Reservation"
-                                  >
-                                    <Trash2 className="w-4 h-4 text-red-600" />
-                                  </button>
-                                </div>
-                              </div>
-                          
-                        
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Mobile Cards */}
-                <div className="lg:hidden space-y-4">
-                  {filteredReservations.map((reservation) => {
-                    const res = transformReservation(reservation);
-                    
-                    return (
-                     <div
-  key={reservation._id}
-  className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col"
->
-  {/* Vehicle Image for Mobile */}
-  {res.photos && res.photos.length > 0 && (
-    <div className="h-32 overflow-hidden">
-      <img
-        src={res.photos[0]}
-        alt={res.vehicleName}
-        className="w-full h-full object-cover"
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = `https://via.placeholder.com/400x200/1EA2E4/ffffff?text=${encodeURIComponent(res.vehicleName)}`;
-        }}
-      />
-    </div>
-  )}
-
-  <div className="p-4 flex-1">
-    <div className="flex justify-between items-start mb-3">
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <h3 className="font-bold text-gray-900">{res.vehicleName}</h3>
-          <span
-            className={`px-2 py-0.5 text-xs font-medium rounded-full border ${getStatusColor(res.rawStatus)}`}
-          >
-            {res.status}
-          </span>
-        </div>
-        <p className="text-sm text-gray-600 font-mono">{res.code}</p>
-      </div>
-    </div>
-
-    <div className="mb-3">
-      <p className="font-medium text-gray-900">{res.customer}</p>
-      <p className="text-xs text-gray-500">{res.email}</p>
-    </div>
-
-    <div className="grid grid-cols-2 gap-3 mb-3">
-      <div>
-        <p className="text-xs text-gray-500">Pick-up</p>
-        <p className="text-sm font-medium">{res.startDate}</p>
-      </div>
-      <div>
-        <p className="text-xs text-gray-500">Drop-off</p>
-        <p className="text-sm font-medium">{res.endDate}</p>
-      </div>
-    </div>
-
-    <div className="flex items-center justify-between mb-3 pt-2">
-      <div>
-        <p className="text-lg font-bold text-[#1EA2E4]">{res.totalAmount}</p>
-        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getPaymentStatusColor(res.paymentStatus)}`}>
-          {res.paymentStatus}
-        </span>
-      </div>
-      <div className="text-xs text-gray-500">
-        <div className="flex items-center gap-1">
-          <MapPin className="w-3 h-3" />
-          <span className="truncate max-w-[100px]">{res.pickupLocation}</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {/* Action Buttons at the bottom for mobile */}
-  <div className="border-t border-gray-100 p-3 bg-gray-50 flex flex-wrap gap-2 justify-end">
-    <button
-      onClick={() => openStatusModal(reservation)}
-      className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
-    >
-      <RefreshCw className="w-4 h-4" />
-    
-    </button>
-    <button
-      onClick={() => openViewModal(reservation)}
-      className="p-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-    >
-      <Eye className="w-3.5 h-3.5 text-gray-600" />
-    </button>
-    <button
-      onClick={() => openEditModal(reservation)}
-      className="p-1.5 bg-white border border-gray-300 rounded-lg hover:bg-blue-50"
-    >
-      <Edit className="w-3.5 h-3.5 text-blue-600" />
-    </button>
-    <button
-      onClick={() => setReservationToDelete(reservation._id)}
-      className="p-1.5 bg-white border border-gray-300 rounded-lg hover:bg-red-50"
-    >
-      <Trash2 className="w-3.5 h-3.5 text-red-600" />
-    </button>
-  </div>
-</div>
-                    );
-                  })}
-                </div>
-              </>
+              <div className="space-y-2">
+                {(STATUS_TRANSITIONS[statusModalRes.status as ReservationStatus] || []).map(s => {
+                  const cfg = STATUS_CONFIG[s] || { label: s, bg: "bg-gray-100", text: "text-gray-700" };
+                  return (
+                    <button key={s} disabled={statusChanging} onClick={() => handleStatusChange(s)}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 border-transparent hover:border-[#00AEEF] transition-all ${cfg.bg} ${statusChanging ? "opacity-50 cursor-not-allowed" : ""}`}>
+                      <span className={`font-semibold text-sm ${cfg.text}`}>{cfg.label}</span>
+                      {statusChanging ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : <ArrowRight className={`w-4 h-4 ${cfg.text}`} />}
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* View Reservation Details Modal */}
-      {isViewModalOpen && selectedReservation && (
+      {/* ══════════════════════════════════════════════════════════════════════
+          DELETE DIALOG
+      ══════════════════════════════════════════════════════════════════════ */}
+      {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-            onClick={() => setIsViewModalOpen(false)}
-          />
-          <div className="relative bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-5 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-gray-800">Reservation Details</h2>
-                <p className="text-sm text-gray-600">Complete reservation information</p>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeleteTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-5 h-5 text-red-600" />
               </div>
-              <button
-                onClick={() => setIsViewModalOpen(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-600" />
+              <div>
+                <h3 className="font-bold text-gray-900">Delete Reservation</h3>
+                <p className="text-sm text-gray-400">This cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-gray-600 mb-6">Are you sure you want to delete <strong className="font-mono">{deleteTarget.code}</strong>?</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 flex items-center gap-2">
+                {deleting && <Loader2 className="w-4 h-4 animate-spin" />} Delete
               </button>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="overflow-y-auto p-8" style={{ maxHeight: "calc(90vh - 80px)" }}>
-              {(() => {
-                const details = transformReservation(selectedReservation);
-                return (
-                  <div className="space-y-8">
-                    {/* Status Bar */}
-                    <div className="flex flex-wrap gap-3 pb-4 border-b border-gray-200">
-                      <span className={`px-3 py-1.5 rounded-full text-sm font-semibold border ${getStatusColor(details.rawStatus)}`}>
-                        {details.status}
-                      </span>
-                      <span className={`px-3 py-1.5 rounded-full text-sm font-semibold ${getPaymentStatusColor(details.paymentStatus)}`}>
-                        {details.paymentStatus.toUpperCase()}
-                      </span>
-                      <span className="px-3 py-1.5 bg-gray-100 rounded-full text-sm font-semibold text-gray-700">
-                        {details.duration} Day{details.duration !== 1 ? "s" : ""}
-                      </span>
+      {/* ══════════════════════════════════════════════════════════════════════
+          CREATE RESERVATION — LARGE CENTERED MODAL
+      ══════════════════════════════════════════════════════════════════════ */}
+      {panelOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-[#0A1628]/70 backdrop-blur-sm" onClick={() => { setPanelOpen(false); resetPanel(); }} />
+          <div className="relative w-full max-w-6xl bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden" style={{ maxHeight: "95vh" }}>
+
+            {/* Modal header */}
+            <div className="bg-gradient-to-r from-[#0A1628] to-[#1A3A5C] px-8 py-5 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">New Reservation</h2>
+                  <p className="text-white/50 text-sm mt-0.5">Step {step} of 4 — {["Customer Info", "Vehicle Selection", "Dates & Locations", "Review & Confirm"][step - 1]}</p>
+                </div>
+                <button onClick={() => { setPanelOpen(false); resetPanel(); }} className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-xl transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Step indicator */}
+              <div className="flex items-center gap-2 mt-5">
+                {["Customer", "Vehicle", "Dates", "Review"].map((label, i) => {
+                  const idx = i + 1;
+                  const active = step === idx;
+                  const done   = step > idx;
+                  return (
+                    <React.Fragment key={label}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all ${active ? "bg-[#00AEEF] text-white scale-110" : done ? "bg-emerald-400 text-white" : "bg-white/20 text-white/50"}`}>
+                          {done ? <CheckCircle className="w-4 h-4" /> : idx}
+                        </div>
+                        <span className={`text-sm font-medium ${active ? "text-white" : done ? "text-emerald-300" : "text-white/40"}`}>{label}</span>
+                      </div>
+                      {i < 3 && <div className={`flex-1 h-0.5 rounded-full transition-all ${done ? "bg-emerald-400" : "bg-white/15"}`} />}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal body — two-column layout */}
+            <div className="flex-1 overflow-hidden flex">
+              {/* Left: form */}
+              <div className="flex-1 overflow-y-auto p-8">
+
+                {/* ── STEP 1: Customer Info ── */}
+                {step === 1 && (
+                  <div className="space-y-6">
+                    {/* Walk-in toggle */}
+                    <div className="flex items-center gap-4 p-4 bg-[#F0F6FF] rounded-2xl border border-[#00AEEF]/20">
+                      <div className="flex-1">
+                        <p className="font-semibold text-[#0A1628] text-sm">Reservation Type</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {isWalkIn ? "Walk-in: customer has no app account — fill details manually" : "Linked account: select a registered user from the system"}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => { setIsWalkIn(true); setSelectedUserId(""); setUserSearch(""); }}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${isWalkIn ? "bg-[#00AEEF] text-white shadow-sm" : "bg-white text-gray-500 border border-gray-200"}`}>
+                          <UserPlus className="w-4 h-4" /> Walk-in
+                        </button>
+                        <button onClick={() => setIsWalkIn(false)}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${!isWalkIn ? "bg-[#0A1628] text-white shadow-sm" : "bg-white text-gray-500 border border-gray-200"}`}>
+                          <Users className="w-4 h-4" /> Registered User
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Vehicle Photos */}
-                    {details.photos.length > 0 && (
-                      <div className="bg-gray-50 rounded-xl p-6">
-                        <h4 className="text-sm font-semibold text-gray-500 mb-4 uppercase tracking-wider">
-                          Vehicle Photos
-                        </h4>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                          {details.photos.slice(0, 3).map((photo, idx) => (
-                            <div key={idx} className="rounded-lg overflow-hidden border border-gray-200 aspect-video">
-                              <img src={photo} alt={`${details.vehicleName} ${idx + 1}`} className="w-full h-full object-cover" />
-                            </div>
-                          ))}
+                    {/* User search (non-walk-in) */}
+                    {!isWalkIn && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-1 h-5 rounded-full bg-[#00AEEF]" />
+                          <h3 className="font-bold text-[#0A1628] text-sm uppercase tracking-wider">Select Customer Account</h3>
                         </div>
+                        <div ref={userDropRef} className="relative">
+                          <div className={`flex items-center border rounded-xl px-3.5 py-2.5 gap-2 transition-all ${selectedUserId ? "border-[#00AEEF] bg-[#00AEEF]/5" : "border-gray-200 bg-white"}`}>
+                            {usersLoading ? <Loader2 className="w-4 h-4 animate-spin text-gray-400 flex-shrink-0" /> : <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                            <input value={userSearch} placeholder="Search by name, email, or phone…"
+                              onChange={e => { setUserSearch(e.target.value); setUserDropOpen(true); if (!e.target.value) { setSelectedUserId(""); setCustName(""); setCustPhone(""); setCustEmail(""); } }}
+                              onFocus={() => setUserDropOpen(true)}
+                              className="flex-1 text-sm outline-none bg-transparent text-gray-800 placeholder:text-gray-400" />
+                            {selectedUserId && <UserCheck className="w-4 h-4 text-[#00AEEF] flex-shrink-0" />}
+                          </div>
+                          {userDropOpen && filteredUsers.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto">
+                              {filteredUsers.map(u => (
+                                <button key={u._id} onClick={() => selectUser(u)}
+                                  className="w-full text-left px-4 py-3 hover:bg-[#00AEEF]/5 transition-colors border-b border-gray-50 last:border-0">
+                                  <p className="text-sm font-semibold text-[#0A1628]">{u.full_name}</p>
+                                  <p className="text-xs text-gray-400 mt-0.5">{u.email} {u.phone ? `· ${u.phone}` : ""}</p>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {userDropOpen && !usersLoading && userSearch && filteredUsers.length === 0 && (
+                            <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-center">
+                              <p className="text-sm text-gray-400">No users found. Try a walk-in reservation instead.</p>
+                            </div>
+                          )}
+                        </div>
+                        {selectedUserId && (
+                          <p className="text-xs text-[#00AEEF] mt-1.5 flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5" /> User linked — fields auto-filled below. You can still edit them.
+                          </p>
+                        )}
                       </div>
                     )}
 
-                    {/* Customer Information */}
-                    <div className="bg-gray-50 rounded-xl p-6">
-                      <div className="flex items-center gap-2 mb-4">
-                        <User className="w-5 h-5 text-[#1EA2E4]" />
-                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                          Customer Information
-                        </h4>
+                    {/* Driver snapshot */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-1 h-5 rounded-full bg-[#00AEEF]" />
+                        <h3 className="font-bold text-[#0A1628] text-sm uppercase tracking-wider">Driver Details</h3>
+                        <span className="text-xs text-gray-400">(stored on reservation)</span>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <p className="text-xs text-gray-500">Full Name</p>
-                          <p className="text-lg font-bold text-gray-900">{details.customer}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Email</p>
-                          <div className="flex items-center gap-2">
-                            <Mail className="w-4 h-4 text-gray-400" />
-                            <p className="text-gray-900">{details.email}</p>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Phone</p>
-                          <div className="flex items-center gap-2">
-                            <Phone className="w-4 h-4 text-gray-400" />
-                            <p className="text-gray-900">{details.phone || "N/A"}</p>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Driver License</p>
-                          <p className="text-gray-900">{details.licenseClass} • {details.licenseNumber}</p>
-                        </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <FLabel label="Full Name *">
+                          <input value={custName} onChange={e => setCustName(e.target.value)} placeholder="e.g. Tendai Moyo" className={inp} />
+                        </FLabel>
+                        <FLabel label="Phone *">
+                          <input value={custPhone} onChange={e => setCustPhone(e.target.value)} placeholder="+263 77 123 4567" type="tel" className={inp} />
+                        </FLabel>
+                        <FLabel label="Email *">
+                          <input value={custEmail} onChange={e => setCustEmail(e.target.value)} placeholder="tendai@email.com" type="email" className={inp} />
+                        </FLabel>
                       </div>
                     </div>
 
-                    {/* Vehicle Information */}
-                    <div className="bg-gray-50 rounded-xl p-6">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Car className="w-5 h-5 text-[#1EA2E4]" />
-                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                          Vehicle Information
-                        </h4>
+                    {/* License */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-1 h-5 rounded-full bg-[#00AEEF]" />
+                        <h3 className="font-bold text-[#0A1628] text-sm uppercase tracking-wider">Driver's Licence</h3>
+                        <span className="text-xs text-gray-400">(optional but recommended)</span>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <p className="text-xs text-gray-500">Make & Model</p>
-                          <p className="text-lg font-bold text-gray-900">{details.vehicleName}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Year</p>
-                          <p className="text-gray-900">{details.year}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Plate Number</p>
-                          <p className="font-mono text-gray-900">{details.plateNumber}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">VIN</p>
-                          <p className="font-mono text-sm text-gray-900">{details.vin}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Color</p>
-                          <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: details.color.toLowerCase() }}></div>
-                            <p className="text-gray-900">{details.color}</p>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Odometer</p>
-                          <div className="flex items-center gap-2">
-                            <Gauge className="w-4 h-4 text-gray-400" />
-                            <p className="text-gray-900">{details.odometer} km</p>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Seats</p>
-                          <p className="text-gray-900">{details.seats}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Doors</p>
-                          <p className="text-gray-900">{details.doors}</p>
-                        </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <FLabel label="Licence Number">
+                          <input value={licNumber} onChange={e => setLicNumber(e.target.value)} placeholder="ZW123456" className={inp} />
+                        </FLabel>
+                        <FLabel label="Class">
+                          <input value={licClass} onChange={e => setLicClass(e.target.value)} placeholder="e.g. 4" className={inp} />
+                        </FLabel>
+                        <FLabel label="Country">
+                          <input value={licCountry} onChange={e => setLicCountry(e.target.value)} placeholder="ZW" className={inp} />
+                        </FLabel>
+                        <FLabel label="Expiry Date">
+                          <input type="date" value={licExpiry} onChange={e => setLicExpiry(e.target.value)} className={inp} />
+                        </FLabel>
                       </div>
-                      {details.features.length > 0 && (
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                          <p className="text-xs text-gray-500 mb-2">Features</p>
-                          <div className="flex flex-wrap gap-2">
-                            {details.features.map((feature, idx) => (
-                              <span key={idx} className="px-2 py-1 bg-white rounded-lg text-xs text-gray-600 border border-gray-200">
-                                {feature}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Rental Details */}
-                    <div className="bg-gray-50 rounded-xl p-6">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Calendar className="w-5 h-5 text-[#1EA2E4]" />
-                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                          Rental Details
-                        </h4>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-white p-4 rounded-lg border border-gray-200">
-                          <div className="flex items-start gap-3">
-                            <MapPin className="w-5 h-5 text-blue-500 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-semibold text-gray-700">Pick-up Location</p>
-                              <p className="text-gray-900">{details.pickupLocation}</p>
-                              <p className="text-sm text-gray-500 mt-1">{details.startFormatted}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="bg-white p-4 rounded-lg border border-gray-200">
-                          <div className="flex items-start gap-3">
-                            <MapPin className="w-5 h-5 text-purple-500 mt-0.5" />
-                            <div>
-                              <p className="text-sm font-semibold text-gray-700">Drop-off Location</p>
-                              <p className="text-gray-900">{details.dropoffLocation}</p>
-                              <p className="text-sm text-gray-500 mt-1">{details.endFormatted}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Payment Summary */}
-                    <div className="bg-gray-50 rounded-xl p-6">
-                      <div className="flex items-center gap-2 mb-4">
-                        <CreditCard className="w-5 h-5 text-[#1EA2E4]" />
-                        <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-                          Payment Summary
-                        </h4>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-white p-4 rounded-lg border border-gray-200">
-                          <p className="text-xs text-gray-500">Total Amount</p>
-                          <p className="text-2xl font-bold text-[#1EA2E4]">{details.totalAmount}</p>
-                        </div>
-                        <div className="bg-white p-4 rounded-lg border border-gray-200">
-                          <p className="text-xs text-gray-500">Paid Amount</p>
-                          <p className="text-2xl font-bold text-emerald-600">{details.paidAmount}</p>
-                        </div>
-                        <div className="bg-white p-4 rounded-lg border border-gray-200">
-                          <p className="text-xs text-gray-500">Outstanding</p>
-                          <p className="text-2xl font-bold text-rose-600">{details.outstandingAmount}</p>
-                        </div>
-                      </div>
-                      {details.pricingBreakdown.length > 0 && (
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                          <p className="text-sm font-medium text-gray-700 mb-3">Pricing Breakdown</p>
-                          <div className="space-y-2">
-                            {details.pricingBreakdown.map((item, idx) => (
-                              <div key={idx} className="flex justify-between text-sm">
-                                <span className="text-gray-600">{item.label} (x{item.quantity})</span>
-                                <span className="font-medium text-gray-900">
-                                  {new Intl.NumberFormat("en-US", {
-                                    style: "currency",
-                                    currency: selectedReservation.pricing?.currency || "USD"
-                                  }).format(parseFloat(item.total.$numberDecimal))}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
-                );
-              })()}
-            </div>
-
-            <div className="border-t border-gray-200 bg-gray-50 px-8 py-5">
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setIsViewModalOpen(false)}
-                  className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Filters Modal */}
-      {showMobileFilters && (
-        <div className="fixed inset-0 z-50 bg-black/50 lg:hidden" onClick={() => setShowMobileFilters(false)}>
-          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">Filter by Status</h3>
-              <button onClick={() => setShowMobileFilters(false)} className="p-2">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-2">
-              {["all", "pending", "confirmed", "active", "completed", "cancelled"].map((status) => (
-                <button
-                  key={status}
-                  onClick={() => {
-                    setStatusFilter(status);
-                    setShowMobileFilters(false);
-                  }}
-                  className={`w-full px-4 py-3 rounded-xl text-left font-medium transition-colors ${
-                    statusFilter === status
-                      ? "bg-[#1EA2E4] text-white"
-                      : "bg-gray-100 text-gray-700"
-                  }`}
-                >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Snackbar */}
-      {snackbar.show && (
-        <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom duration-300">
-          <div
-            className={`px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px] ${
-              snackbar.type === "success"
-                ? "bg-green-50 border border-green-200 text-green-800"
-                : snackbar.type === "error"
-                ? "bg-red-50 border border-red-200 text-red-800"
-                : "bg-blue-50 border border-blue-200 text-blue-800"
-            }`}
-          >
-            {snackbar.type === "success" && (
-              <CheckCircle className="w-5 h-5 flex-shrink-0" />
-            )}
-            {snackbar.type === "error" && (
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            )}
-            <span className="text-sm font-medium flex-1">{snackbar.message}</span>
-            <button
-              onClick={() => setSnackbar((prev) => ({ ...prev, show: false }))}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Reservation Modal - Side Modal */}
-  {/* Edit Reservation Modal - Side Modal */}
-{isEditModalOpen && selectedReservationForEdit && editFormData && (
-  <div className="fixed inset-0 z-50 overflow-hidden">
-    <div
-      className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-      onClick={() => setIsEditModalOpen(false)}
-    />
-    <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
-      <div className="relative w-screen max-w-4xl">
-        <div className="h-full bg-white shadow-2xl overflow-y-auto">
-          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">Edit Reservation</h2>
-              <p className="text-sm text-gray-600">Update reservation details</p>
-            </div>
-            <button
-              onClick={() => setIsEditModalOpen(false)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-600" />
-            </button>
-          </div>
-
-          <div className="p-6 space-y-6">
-            {/* Basic Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Basic Information</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Reservation Code</label>
-                  <input
-                    type="text"
-                    value={editFormData.code || ""}
-                    onChange={(e) => setEditFormData({...editFormData, code: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                  <select
-                    value={editFormData.status || "pending"}
-                    onChange={(e) => setEditFormData({...editFormData, status: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="confirmed">Confirmed</option>
-                    <option value="active">Active</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">User ID</label>
-                  <input
-                    type="text"
-                    value={editFormData.user_id || ""}
-                    onChange={(e) => setEditFormData({...editFormData, user_id: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Created By</label>
-                  <input
-                    type="text"
-                    value={editFormData.created_by || ""}
-                    onChange={(e) => setEditFormData({...editFormData, created_by: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Created Channel</label>
-                  <select
-                    value={editFormData.created_channel || "web"}
-                    onChange={(e) => setEditFormData({...editFormData, created_channel: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  >
-                    <option value="web">Web</option>
-                    <option value="mobile">Mobile</option>
-                    <option value="admin">Admin</option>
-                    <option value="call_center">Call Center</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Vehicle Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Vehicle Information</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle ID</label>
-                  <input
-                    type="text"
-                    value={editFormData.vehicle_id || ""}
-                    onChange={(e) => setEditFormData({...editFormData, vehicle_id: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Model ID</label>
-                  <input
-                    type="text"
-                    value={editFormData.vehicle_model_id || ""}
-                    onChange={(e) => setEditFormData({...editFormData, vehicle_model_id: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Pickup & Dropoff */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Pickup & Dropoff</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Branch ID</label>
-                  <input
-                    type="text"
-                    value={editFormData.pickup?.branch_id || ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData, 
-                      pickup: {...editFormData.pickup, branch_id: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Pickup Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    value={editFormData.pickup?.at ? editFormData.pickup.at.slice(0, 16) : ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData, 
-                      pickup: {...editFormData.pickup, at: new Date(e.target.value).toISOString()}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Dropoff Branch ID</label>
-                  <input
-                    type="text"
-                    value={editFormData.dropoff?.branch_id || ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData, 
-                      dropoff: {...editFormData.dropoff, branch_id: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Dropoff Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    value={editFormData.dropoff?.at ? editFormData.dropoff.at.slice(0, 16) : ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData, 
-                      dropoff: {...editFormData.dropoff, at: new Date(e.target.value).toISOString()}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Driver Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Driver Information</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-                  <input
-                    type="text"
-                    value={editFormData.driver_snapshot?.full_name || ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      driver_snapshot: {...editFormData.driver_snapshot, full_name: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                  <input
-                    type="text"
-                    value={editFormData.driver_snapshot?.phone || ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      driver_snapshot: {...editFormData.driver_snapshot, phone: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                  <input
-                    type="email"
-                    value={editFormData.driver_snapshot?.email || ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      driver_snapshot: {...editFormData.driver_snapshot, email: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">License Number</label>
-                  <input
-                    type="text"
-                    value={editFormData.driver_snapshot?.driver_license?.number || ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      driver_snapshot: {
-                        ...editFormData.driver_snapshot,
-                        driver_license: {...editFormData.driver_snapshot?.driver_license, number: e.target.value}
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">License Country</label>
-                  <input
-                    type="text"
-                    value={editFormData.driver_snapshot?.driver_license?.country || "ZW"}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      driver_snapshot: {
-                        ...editFormData.driver_snapshot,
-                        driver_license: {...editFormData.driver_snapshot?.driver_license, country: e.target.value}
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">License Class</label>
-                  <input
-                    type="text"
-                    value={editFormData.driver_snapshot?.driver_license?.class || ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      driver_snapshot: {
-                        ...editFormData.driver_snapshot,
-                        driver_license: {...editFormData.driver_snapshot?.driver_license, class: e.target.value}
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">License Expiry</label>
-                  <input
-                    type="datetime-local"
-                    value={editFormData.driver_snapshot?.driver_license?.expires_at ? editFormData.driver_snapshot.driver_license.expires_at.slice(0, 16) : ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      driver_snapshot: {
-                        ...editFormData.driver_snapshot,
-                        driver_license: {...editFormData.driver_snapshot?.driver_license, expires_at: new Date(e.target.value).toISOString()}
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">License Verified</label>
-                  <select
-                    value={editFormData.driver_snapshot?.driver_license?.verified ? "true" : "false"}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      driver_snapshot: {
-                        ...editFormData.driver_snapshot,
-                        driver_license: {...editFormData.driver_snapshot?.driver_license, verified: e.target.value === "true"}
-                      }
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  >
-                    <option value="false">No</option>
-                    <option value="true">Yes</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Pricing Section */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Pricing</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
-                  <input
-                    type="text"
-                    value={editFormData.pricing?.currency || "USD"}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      pricing: {...editFormData.pricing, currency: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Grand Total</label>
-                  <input
-                    type="text"
-                    value={editFormData.pricing?.grand_total || "0"}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      pricing: {...editFormData.pricing, grand_total: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Computed At</label>
-                  <input
-                    type="datetime-local"
-                    value={editFormData.pricing?.computed_at ? editFormData.pricing.computed_at.slice(0, 16) : ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      pricing: {...editFormData.pricing, computed_at: new Date(e.target.value).toISOString()}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-              </div>
-
-              {/* Fees */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Fees (JSON)</label>
-                <textarea
-                  value={JSON.stringify(editFormData.pricing?.fees || [], null, 2)}
-                  onChange={(e) => {
-                    try {
-                      const fees = JSON.parse(e.target.value);
-                      setEditFormData({
-                        ...editFormData,
-                        pricing: {...editFormData.pricing, fees}
-                      });
-                    } catch (err) {
-                      // Invalid JSON, ignore
-                    }
-                  }}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm"
-                  placeholder='[{"code": "AIRPORT_FEE", "amount": "10.00"}]'
-                />
-              </div>
-
-              {/* Discounts */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Discounts (JSON)</label>
-                <textarea
-                  value={JSON.stringify(editFormData.pricing?.discounts || [], null, 2)}
-                  onChange={(e) => {
-                    try {
-                      const discounts = JSON.parse(e.target.value);
-                      setEditFormData({
-                        ...editFormData,
-                        pricing: {...editFormData.pricing, discounts}
-                      });
-                    } catch (err) {
-                      // Invalid JSON, ignore
-                    }
-                  }}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm"
-                  placeholder='[{"promo_code_id": "promo01", "amount": "5.00"}]'
-                />
-              </div>
-
-              {/* Taxes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Taxes (JSON)</label>
-                <textarea
-                  value={JSON.stringify(editFormData.pricing?.taxes || [], null, 2)}
-                  onChange={(e) => {
-                    try {
-                      const taxes = JSON.parse(e.target.value);
-                      setEditFormData({
-                        ...editFormData,
-                        pricing: {...editFormData.pricing, taxes}
-                      });
-                    } catch (err) {
-                      // Invalid JSON, ignore
-                    }
-                  }}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm"
-                  placeholder='[{"code": "VAT", "rate": 0.15, "amount": "24.00"}]'
-                />
-              </div>
-
-              {/* Breakdown */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Pricing Breakdown (JSON)</label>
-                <textarea
-                  value={JSON.stringify(editFormData.pricing?.breakdown || [], null, 2)}
-                  onChange={(e) => {
-                    try {
-                      const breakdown = JSON.parse(e.target.value);
-                      setEditFormData({
-                        ...editFormData,
-                        pricing: {...editFormData.pricing, breakdown}
-                      });
-                    } catch (err) {
-                      // Invalid JSON, ignore
-                    }
-                  }}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4] font-mono text-sm"
-                  placeholder='[{"label": "Base daily rate", "quantity": 3, "unit_amount": "50.00", "total": "150.00"}]'
-                />
-              </div>
-            </div>
-
-            {/* Payment Summary */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Payment Summary</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Status</label>
-                  <select
-                    value={editFormData.payment_summary?.status || "unpaid"}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      payment_summary: {...editFormData.payment_summary, status: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  >
-                    <option value="unpaid">Unpaid</option>
-                    <option value="paid">Paid</option>
-                    <option value="partial">Partial</option>
-                    <option value="refunded">Refunded</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Paid Total</label>
-                  <input
-                    type="text"
-                    value={editFormData.payment_summary?.paid_total || "0"}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      payment_summary: {...editFormData.payment_summary, paid_total: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Outstanding</label>
-                  <input
-                    type="text"
-                    value={editFormData.payment_summary?.outstanding || "0"}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      payment_summary: {...editFormData.payment_summary, outstanding: e.target.value}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Last Payment At</label>
-                  <input
-                    type="datetime-local"
-                    value={editFormData.payment_summary?.last_payment_at ? editFormData.payment_summary.last_payment_at.slice(0, 16) : ""}
-                    onChange={(e) => setEditFormData({
-                      ...editFormData,
-                      payment_summary: {...editFormData.payment_summary, last_payment_at: e.target.value ? new Date(e.target.value).toISOString() : null}
-                    })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Additional Notes</h3>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-                <textarea
-                  value={editFormData.notes || ""}
-                  onChange={(e) => setEditFormData({...editFormData, notes: e.target.value})}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  placeholder="Additional notes about this reservation..."
-                />
-              </div>
-            </div>
-
-            {/* Created/Updated Timestamps */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Timestamps</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Created At</label>
-                  <input
-                    type="datetime-local"
-                    value={editFormData.created_at ? editFormData.created_at.slice(0, 16) : ""}
-                    onChange={(e) => setEditFormData({...editFormData, created_at: new Date(e.target.value).toISOString()})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Updated At</label>
-                  <input
-                    type="datetime-local"
-                    value={editFormData.updated_at ? editFormData.updated_at.slice(0, 16) : ""}
-                    onChange={(e) => setEditFormData({...editFormData, updated_at: new Date(e.target.value).toISOString()})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1EA2E4]"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="sticky bottom-0 border-t border-gray-200 bg-gray-50 px-6 py-4">
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setIsEditModalOpen(false)}
-                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdateReservation}
-                disabled={isUpdatingReservation}
-                className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 flex items-center gap-2"
-              >
-                {isUpdatingReservation ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Updating...
-                  </>
-                ) : (
-                  "Save Changes"
                 )}
+
+                {/* ── STEP 2: Vehicle ── */}
+                {step === 2 && (
+                  <div className="space-y-6">
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-1 h-5 rounded-full bg-[#00AEEF]" />
+                        <h3 className="font-bold text-[#0A1628] text-sm uppercase tracking-wider">Pickup Branch</h3>
+                      </div>
+                      <div className="relative">
+                        <select value={pickupBranchId} onChange={e => { setPickupBranchId(e.target.value); setSelectedVehicleId(""); }} className={sel}>
+                          <option value="">Select pickup branch…</option>
+                          {branches.map(b => <option key={b._id} value={b._id}>{b.name} — {b.address?.city}</option>)}
+                        </select>
+                        <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none rotate-90" />
+                      </div>
+                    </div>
+
+                    {pickupBranchId && (
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-1 h-5 rounded-full bg-[#00AEEF]" />
+                            <h3 className="font-bold text-[#0A1628] text-sm uppercase tracking-wider">Available Vehicles</h3>
+                          </div>
+                          <span className="text-xs text-gray-400">{vehiclesForBranch.length} vehicle{vehiclesForBranch.length !== 1 ? "s" : ""}</span>
+                        </div>
+                        {vehiclesForBranch.length === 0 ? (
+                          <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400">
+                            <Car className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                            <p className="font-medium text-sm">No vehicles at this branch</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {vehiclesForBranch.map(v => {
+                              const sel2 = selectedVehicleId === v._id;
+                              return (
+                                <button key={v._id} onClick={() => setSelectedVehicleId(v._id)}
+                                  className={`text-left p-4 rounded-2xl border-2 transition-all ${sel2 ? "border-[#00AEEF] bg-[#00AEEF]/5 shadow-sm" : "border-gray-200 hover:border-[#00AEEF]/40 hover:bg-gray-50"}`}>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <p className="font-bold text-sm text-[#0A1628] font-mono">{v.plate_number}</p>
+                                      <p className="text-xs text-gray-500 mt-0.5">{getVehicleModelLabel(v)}</p>
+                                    </div>
+                                    {sel2 && <CheckCircle className="w-4 h-4 text-[#00AEEF] flex-shrink-0" />}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                    {v.color && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{v.color}</span>}
+                                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${v.availability_state === "available" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                      {v.availability_state}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── STEP 3: Dates ── */}
+                {step === 3 && (
+                  <div className="space-y-6">
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-1 h-5 rounded-full bg-[#00AEEF]" />
+                        <h3 className="font-bold text-[#0A1628] text-sm uppercase tracking-wider">Pickup Details</h3>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FLabel label="Pickup Branch *">
+                          <div className="relative">
+                            <select value={pickupBranchId} onChange={e => setPickupBranchId(e.target.value)} className={sel}>
+                              <option value="">Select…</option>
+                              {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                            </select>
+                            <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none rotate-90" />
+                          </div>
+                        </FLabel>
+                        <FLabel label="Pickup Date & Time *">
+                          <input type="datetime-local" value={pickupAt} onChange={e => setPickupAt(e.target.value)} className={inp} />
+                        </FLabel>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-1 h-5 rounded-full bg-indigo-400" />
+                        <h3 className="font-bold text-[#0A1628] text-sm uppercase tracking-wider">Dropoff Details</h3>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FLabel label="Dropoff Branch *">
+                          <div className="relative">
+                            <select value={dropoffBranchId} onChange={e => setDropoffBranchId(e.target.value)} className={sel}>
+                              <option value="">Select…</option>
+                              {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                            </select>
+                            <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none rotate-90" />
+                          </div>
+                        </FLabel>
+                        <FLabel label="Dropoff Date & Time *">
+                          <input type="datetime-local" value={dropoffAt} onChange={e => setDropoffAt(e.target.value)} className={inp} />
+                        </FLabel>
+                      </div>
+                    </div>
+
+                    {pickupAt && dropoffAt && new Date(dropoffAt) > new Date(pickupAt) && (
+                      <div className="bg-[#00AEEF]/5 border border-[#00AEEF]/20 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-[#00AEEF]">
+                        <Clock className="w-4 h-4 flex-shrink-0" />
+                        Duration: <strong>{Math.ceil((new Date(dropoffAt).getTime() - new Date(pickupAt).getTime()) / 86400000)} day{Math.ceil((new Date(dropoffAt).getTime() - new Date(pickupAt).getTime()) / 86400000) !== 1 ? "s" : ""}</strong>
+                      </div>
+                    )}
+
+                    <FLabel label="Notes (optional)">
+                      <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                        placeholder="Any special instructions or notes…"
+                        className={inp + " resize-none"} />
+                    </FLabel>
+                  </div>
+                )}
+
+                {/* ── STEP 4: Review ── */}
+                {step === 4 && (
+                  <div className="space-y-5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-1 h-5 rounded-full bg-emerald-400" />
+                      <h3 className="font-bold text-[#0A1628] text-sm uppercase tracking-wider">Review & Confirm</h3>
+                    </div>
+
+                    {/* Type badge */}
+                    <div className="flex items-center gap-2">
+                      {isWalkIn
+                        ? <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">Walk-in Customer</span>
+                        : <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">Registered User Account</span>}
+                      <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">Web · Admin Created</span>
+                    </div>
+
+                    <ReviewSection title="Customer / Driver" icon={<User className="w-4 h-4" />}>
+                      <RR label="Name" v={custName} />
+                      <RR label="Phone" v={custPhone} />
+                      <RR label="Email" v={custEmail} />
+                      {licNumber && <RR label="Licence #" v={`${licNumber} (${licClass || "—"}) · ${licCountry}`} />}
+                      {licExpiry && <RR label="Expiry" v={formatDate(licExpiry)} />}
+                    </ReviewSection>
+
+                    {selectedVehicle && (
+                      <ReviewSection title="Vehicle" icon={<Car className="w-4 h-4" />}>
+                        <RR label="Plate" v={selectedVehicle.plate_number} />
+                        <RR label="Model" v={getVehicleModelLabel(selectedVehicle)} />
+                        {selectedVehicle.color && <RR label="Color" v={selectedVehicle.color} />}
+                      </ReviewSection>
+                    )}
+
+                    <ReviewSection title="Booking Details" icon={<Calendar className="w-4 h-4" />}>
+                      <RR label="Pickup Branch" v={branches.find(b => b._id === pickupBranchId)?.name || "—"} />
+                      <RR label="Pickup Time" v={formatDateTime(pickupAt)} />
+                      <RR label="Dropoff Branch" v={branches.find(b => b._id === dropoffBranchId)?.name || "—"} />
+                      <RR label="Dropoff Time" v={formatDateTime(dropoffAt)} />
+                      {pickupAt && dropoffAt && <RR label="Duration" v={`${Math.ceil((new Date(dropoffAt).getTime() - new Date(pickupAt).getTime()) / 86400000)} days`} />}
+                      {notes && <RR label="Notes" v={notes} />}
+                    </ReviewSection>
+                  </div>
+                )}
+              </div>
+
+              {/* Right: sidebar summary (steps 2-4) */}
+              {step > 1 && (
+                <div className="w-72 flex-shrink-0 bg-gray-50 border-l border-gray-100 p-6 space-y-5 overflow-y-auto">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Summary</p>
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <User className="w-4 h-4 text-[#00AEEF] flex-shrink-0" />
+                      <span className="truncate font-medium">{custName || "—"}</span>
+                    </div>
+                    {custPhone && <p className="text-xs text-gray-400 pl-6">{custPhone}</p>}
+                    {isWalkIn
+                      ? <span className="ml-6 text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">Walk-in</span>
+                      : <span className="ml-6 text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">Registered User</span>}
+                  </div>
+
+                  {selectedVehicle && (
+                    <div className="space-y-1 text-sm pt-3 border-t border-gray-200">
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Car className="w-4 h-4 text-[#00AEEF] flex-shrink-0" />
+                        <span className="font-medium font-mono">{selectedVehicle.plate_number}</span>
+                      </div>
+                      <p className="text-xs text-gray-400 pl-6">{getVehicleModelLabel(selectedVehicle)}</p>
+                    </div>
+                  )}
+
+                  {pickupBranchId && (
+                    <div className="space-y-2 text-xs pt-3 border-t border-gray-200">
+                      <div className="flex items-start gap-2">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-gray-400">Pickup</p>
+                          <p className="font-medium text-gray-700">{branches.find(b => b._id === pickupBranchId)?.name}</p>
+                          {pickupAt && <p className="text-gray-400 mt-0.5">{formatDateTime(pickupAt)}</p>}
+                        </div>
+                      </div>
+                      {dropoffBranchId && (
+                        <div className="flex items-start gap-2">
+                          <MapPin className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-gray-400">Dropoff</p>
+                            <p className="font-medium text-gray-700">{branches.find(b => b._id === dropoffBranchId)?.name}</p>
+                            {dropoffAt && <p className="text-gray-400 mt-0.5">{formatDateTime(dropoffAt)}</p>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {pickupAt && dropoffAt && new Date(dropoffAt) > new Date(pickupAt) && (
+                    <div className="bg-[#00AEEF]/10 rounded-xl p-3 text-center border border-[#00AEEF]/20">
+                      <p className="text-xs text-gray-400">Duration</p>
+                      <p className="text-2xl font-bold text-[#00AEEF]">{Math.ceil((new Date(dropoffAt).getTime() - new Date(pickupAt).getTime()) / 86400000)}</p>
+                      <p className="text-xs text-gray-400">days</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal footer */}
+            <div className="border-t border-gray-100 px-8 py-4 bg-gray-50 flex items-center justify-between gap-4 flex-shrink-0">
+              <button onClick={() => step > 1 ? setStep(step - 1) : (setPanelOpen(false), resetPanel())}
+                className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors">
+                {step === 1 ? "Cancel" : "← Back"}
               </button>
+              <div className="flex items-center gap-3">
+                {step < 4 && (
+                  <button onClick={() => setStep(step + 1)}
+                    disabled={(step === 1 && !step1Valid()) || (step === 2 && !step2Valid()) || (step === 3 && !step3Valid())}
+                    className="px-7 py-2.5 bg-[#00AEEF] text-white rounded-xl text-sm font-medium hover:bg-[#0099D6] disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                    Next Step →
+                  </button>
+                )}
+                {step === 4 && (
+                  <button onClick={handleCreateReservation} disabled={panelSubmitting}
+                    className="px-7 py-2.5 bg-gradient-to-r from-[#0A1628] to-[#1A5FA8] text-white rounded-xl text-sm font-medium disabled:opacity-50 flex items-center gap-2 hover:opacity-90 transition-all shadow-sm">
+                    {panelSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    {panelSubmitting ? "Creating…" : "Confirm & Create"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
 
-      {/* Status Update Modal */}
-{showStatusModal && selectedStatusReservation && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div
-      className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-      onClick={() => !isUpdatingStatus && setShowStatusModal(false)}
-    />
-    <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
-      <div className="p-6">
-        <div className="flex items-center mb-4">
-          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mr-4">
-            <Clock className="w-6 h-6 text-blue-600" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">Update Reservation Status</h3>
-            <p className="text-sm text-gray-600">
-              Reservation: {selectedStatusReservation.code}
-            </p>
-          </div>
+      {/* ── Snackbar ── */}
+      {snackbar.open && (
+        <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl text-sm font-medium transition-all ${snackbar.type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}>
+          {snackbar.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {snackbar.message}
+          <button onClick={() => setSnackbar(s => ({ ...s, open: false }))} className="ml-2 opacity-70 hover:opacity-100"><X className="w-4 h-4" /></button>
         </div>
-
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select New Status
-          </label>
-          <select
-            value={selectedNewStatus}
-            onChange={(e) => setSelectedNewStatus(e.target.value)}
-            disabled={isUpdatingStatus}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] focus:border-transparent disabled:opacity-50"
-          >
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="active">Active</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={() => setShowStatusModal(false)}
-            disabled={isUpdatingStatus}
-            className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleConfirmStatusUpdate}
-            disabled={isUpdatingStatus || selectedNewStatus === selectedStatusReservation.status}
-            className="px-4 py-2.5 bg-[#1EA2E4] text-white rounded-lg hover:bg-[#1A8BC9] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {isUpdatingStatus ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Updating...
-              </>
-            ) : (
-              "Update Status"
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-      {/* Delete Confirmation Modal */}
-     
-{reservationToDelete && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div
-      className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-      onClick={() => !isDeleting && setReservationToDelete(null)}
-    />
-    <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
-      <div className="p-6">
-        <div className="flex items-center mb-4">
-          <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mr-4">
-            <AlertCircle className="w-6 h-6 text-red-600" />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-gray-900">Delete Reservation</h3>
-            <p className="text-sm text-gray-600">This action cannot be undone</p>
-          </div>
-        </div>
-
-        <p className="text-gray-600 mb-6">
-          Are you sure you want to delete this reservation? This will permanently remove all
-          reservation data and cannot be recovered.
-        </p>
-
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={() => setReservationToDelete(null)}
-            disabled={isDeleting}
-            className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => handleDeleteReservation(reservationToDelete)}
-            disabled={isDeleting}
-            className="px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {isDeleting ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Deleting...
-              </>
-            ) : (
-              "Delete Reservation"
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
     </div>
   );
-};
+}
 
-export default AdminReservationsPage;
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status] || { label: status, bg: "bg-gray-100", text: "text-gray-600", dot: "bg-gray-400" };
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  );
+}
+
+function PayBadge({ status }: { status: string }) {
+  const cfg = PAY_STATUS_CONFIG[status] || { label: status, bg: "bg-gray-50", text: "text-gray-500" };
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>;
+}
+
+function ReservationCard({ reservation: r, onView, onChangeStatus, onDelete }: {
+  reservation: IReservation; onView: () => void; onChangeStatus: () => void; onDelete: () => void;
+}) {
+  const vehicleLabel  = getVehicleLabel(r);
+  const customerName  = getCustomerName(r);
+  const pickupBranch  = getBranchName(r.pickup?.branch_id);
+  const dropoffBranch = getBranchName(r.dropoff?.branch_id);
+  const canChange     = (STATUS_TRANSITIONS[r.status as ReservationStatus] || []).length > 0;
+  const grandTotal    = r.pricing?.grand_total ? parseDecimalValue(r.pricing.grand_total) : null;
+  const walkIn        = isWalkInReservation(r);
+  const createdBy     = getCreatedByName(r);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all flex flex-col overflow-hidden group">
+      {/* Top accent */}
+      <div className="h-1 bg-gradient-to-r from-[#0A1628] to-[#00AEEF]" />
+
+      <div className="p-5 flex flex-col gap-3 flex-1">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-bold text-[#0A1628] text-sm font-mono">{r.code}</p>
+              {walkIn && (
+                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full uppercase tracking-wide">Walk-in</span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">{formatDate(r.created_at)}</p>
+            {createdBy && <p className="text-[10px] text-gray-300 mt-0.5">By: {createdBy}</p>}
+          </div>
+          <div className="flex flex-col items-end gap-1 flex-shrink-0">
+            <StatusBadge status={r.status} />
+            <PayBadge status={r.payment_summary?.status || "unpaid"} />
+          </div>
+        </div>
+
+        {/* Customer */}
+        <div className="flex items-center gap-2 text-sm">
+          <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <span className="text-gray-700 font-medium truncate">{customerName}</span>
+        </div>
+
+        {/* Vehicle */}
+        <div className="flex items-center gap-2 text-sm">
+          <Car className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+          <span className="text-gray-600 truncate">{vehicleLabel}</span>
+          {typeof r.vehicle_id === "object" && r.vehicle_id && (r.vehicle_id as IVehicleRef).plate_number && (
+            <span className="text-xs text-gray-400 font-mono flex-shrink-0">· {(r.vehicle_id as IVehicleRef).plate_number}</span>
+          )}
+        </div>
+
+        {/* Pickup / Dropoff */}
+        <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-600 space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <MapPin className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+            <span className="text-gray-400">Pickup:</span>
+            <span className="truncate font-medium">{pickupBranch}</span>
+            <span className="text-gray-300 flex-shrink-0">{formatDate(r.pickup?.at)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <MapPin className="w-3 h-3 text-red-400 flex-shrink-0" />
+            <span className="text-gray-400">Dropoff:</span>
+            <span className="truncate font-medium">{dropoffBranch}</span>
+            <span className="text-gray-300 flex-shrink-0">{formatDate(r.dropoff?.at)}</span>
+          </div>
+        </div>
+
+        {/* Total */}
+        {grandTotal !== null && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400 text-xs">Grand Total</span>
+            <span className="font-bold text-[#0A1628]">{r.pricing?.currency || "USD"} {grandTotal.toFixed(2)}</span>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 pt-2 border-t border-gray-50">
+          <button onClick={onView}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-[#00AEEF] border border-[#00AEEF] rounded-xl hover:bg-[#00AEEF]/5 transition-colors">
+            <Eye className="w-3.5 h-3.5" /> View
+          </button>
+          {canChange && (
+            <button onClick={onChangeStatus}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-[#1A5FA8] border border-[#1A5FA8] rounded-xl hover:bg-[#1A5FA8]/5 transition-colors">
+              <ArrowRight className="w-3.5 h-3.5" /> Status
+            </button>
+          )}
+          <button onClick={onDelete}
+            className="p-2 text-red-400 border border-red-200 rounded-xl hover:bg-red-50 hover:text-red-600 transition-colors">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FLabel({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-600 mb-1.5">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function ReviewSection({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="border border-gray-200 rounded-2xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-200">
+        <span className="text-[#00AEEF]">{icon}</span>
+        <span className="font-bold text-sm text-[#0A1628]">{title}</span>
+      </div>
+      <div className="divide-y divide-gray-50">{children}</div>
+    </div>
+  );
+}
+
+function RR({ label, v }: { label: string; v: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm">
+      <span className="text-gray-400 flex-shrink-0">{label}</span>
+      <span className="text-gray-800 font-medium text-right">{v || "—"}</span>
+    </div>
+  );
+}

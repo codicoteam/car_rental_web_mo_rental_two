@@ -1,18 +1,20 @@
 import { useState, useEffect } from 'react';
 import { 
-  Bell, Check, CheckCircle, AlertCircle, Info, Clock, Menu, X, Search, Plus, 
-  Send, Users, ChevronDown, User, Calendar, Tag, Shield, Mail, 
+  Bell, Check, CheckCircle, AlertCircle, Info, Clock, Menu, X, Search, Plus,
+  Send, Users, ChevronDown, User, Calendar, Tag, Shield, Mail,
   Eye, EyeOff, Trash2, Copy, Filter, Calendar as CalendarIcon,
   Sparkles,
   MoreVertical,
   Zap,
   Star,
   AlertTriangle,
-  MessageSquare
+  MessageSquare,
+  Smartphone,
 } from 'lucide-react';
 import Sidebar from '../../components/agentsidebar';
 import NotificationService from '../../Services/notification_service';
 import UserService from '../../Services/users_service';
+import { fetchAllPromoCodes, type IPromoCode } from '../../Services/adminAndManager/promo_code_service';
 
 interface Notification {
   id: string;
@@ -47,6 +49,7 @@ interface NewNotificationData {
   category?: string;
   details?: string;
   send_at?: string;
+  channels: string[];
 }
 
 export default function AgentNotificationScreen() {
@@ -73,8 +76,15 @@ export default function AgentNotificationScreen() {
     userId: '',
     category: 'system',
     details: '',
-    send_at: ''
+    send_at: '',
+    channels: ['in_app'],
   });
+
+  const [agentPromoCodes, setAgentPromoCodes] = useState<IPromoCode[]>([]);
+  const [loadingAgentPromos, setLoadingAgentPromos] = useState(false);
+  const [showAgentPromoDropdown, setShowAgentPromoDropdown] = useState(false);
+  const [agentPromoSearch, setAgentPromoSearch] = useState('');
+  const [selectedAgentPromo, setSelectedAgentPromo] = useState<IPromoCode | null>(null);
 
   const fetchNotifications = async () => {
     try {
@@ -166,6 +176,36 @@ export default function AgentNotificationScreen() {
     } finally {
       setLoadingUsers(false);
     }
+  };
+
+  const fetchAgentPromoCodes = async () => {
+    setLoadingAgentPromos(true);
+    try {
+      const res = await fetchAllPromoCodes();
+      setAgentPromoCodes(res.data);
+    } catch { /* silent */ }
+    finally { setLoadingAgentPromos(false); }
+  };
+
+  const getAgentPromoDisplayValue = (p: IPromoCode) =>
+    p.type === 'percent' ? `${p.value}%` : `$${p.value.toFixed(2)}`;
+
+  const filteredAgentPromos = agentPromoCodes.filter(p => {
+    const s = agentPromoSearch.toLowerCase();
+    return p.code.toLowerCase().includes(s) || (p.notes || '').toLowerCase().includes(s);
+  });
+
+  const applyAgentPromo = (promo: IPromoCode) => {
+    const val = getAgentPromoDisplayValue(promo);
+    const expiry = promo.valid_to ? new Date(promo.valid_to).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+    setNewNotification(prev => ({
+      ...prev,
+      title: prev.title || `Special Offer: Use ${promo.code} for ${val} OFF!`,
+      message: prev.message || `Use promo code ${promo.code} to enjoy ${val} off your next rental${expiry ? ` — valid until ${expiry}` : ''}. ${promo.notes || "Don't miss this exclusive deal!"}`,
+    }));
+    setSelectedAgentPromo(promo);
+    setShowAgentPromoDropdown(false);
+    setAgentPromoSearch('');
   };
 
   const getNotificationType = (item: any): Notification['type'] => {
@@ -262,10 +302,20 @@ export default function AgentNotificationScreen() {
         type: newNotification.type,
         priority: newNotification.priority,
         category: newNotification.category,
+        channels: newNotification.channels.length > 0 ? newNotification.channels : ['in_app'],
         status: newNotification.send_at ? 'scheduled' : 'sent',
         details: newNotification.details,
         created_at: new Date().toISOString(),
-        send_at: newNotification.send_at
+        send_at: newNotification.send_at,
+        ...(selectedAgentPromo ? {
+          data: {
+            promo_code_id: selectedAgentPromo._id,
+            promo_code: selectedAgentPromo.code,
+            promo_discount: getAgentPromoDisplayValue(selectedAgentPromo),
+            promo_type: selectedAgentPromo.type,
+            promo_valid_to: selectedAgentPromo.valid_to || null,
+          }
+        } : {}),
       };
 
       if (newNotification.userId && newNotification.userId !== 'all') {
@@ -292,16 +342,8 @@ export default function AgentNotificationScreen() {
       
       setNotifications(prev => [newNotif, ...prev]);
       setShowCreateModal(false);
-      setNewNotification({
-        title: '',
-        message: '',
-        type: 'info',
-        priority: 'normal',
-        userId: '',
-        category: 'system',
-        details: '',
-        send_at: ''
-      });
+      setNewNotification({ title: '', message: '', type: 'info', priority: 'normal', userId: '', category: 'system', details: '', send_at: '', channels: ['in_app'] });
+      setSelectedAgentPromo(null);
     } catch (err: any) {
       console.error('Error creating notification:', err);
       alert(err?.message || 'Failed to create notification');
@@ -452,10 +494,14 @@ export default function AgentNotificationScreen() {
     }
   };
 
-  useEffect(() => { 
+  useEffect(() => {
     fetchNotifications();
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    if (showAgentPromoDropdown && agentPromoCodes.length === 0) fetchAgentPromoCodes();
+  }, [showAgentPromoDropdown, agentPromoCodes.length]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/20 flex overflow-hidden">
@@ -821,7 +867,7 @@ export default function AgentNotificationScreen() {
                   </div>
                   <h2 className="text-xl font-bold text-white">Create Notification</h2>
                 </div>
-                <button onClick={() => setShowCreateModal(false)} className="p-2 hover:bg-white/20 rounded-xl transition-colors">
+                <button onClick={() => { setShowCreateModal(false); setSelectedAgentPromo(null); }} className="p-2 hover:bg-white/20 rounded-xl transition-colors">
                   <X className="w-5 h-5 text-white" />
                 </button>
               </div>
@@ -901,6 +947,137 @@ export default function AgentNotificationScreen() {
                 </p>
               </div>
 
+              {/* Promo Code Section */}
+              <div className="border border-emerald-200/60 bg-gradient-to-br from-emerald-50/60 to-white rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-1.5 bg-emerald-100 rounded-lg">
+                    <Tag className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Attach Promo Code</p>
+                    <p className="text-xs text-gray-500">Optional — auto-fills title &amp; message</p>
+                  </div>
+                </div>
+
+                <div className="relative mb-2">
+                  <div
+                    className="w-full px-4 py-3 bg-white border-2 border-gray-200/60 rounded-xl cursor-pointer flex justify-between items-center hover:border-emerald-300 transition-all"
+                    onClick={() => setShowAgentPromoDropdown(p => !p)}
+                  >
+                    <span className={selectedAgentPromo ? 'text-gray-900 font-medium' : 'text-gray-400'}>
+                      {selectedAgentPromo
+                        ? `${selectedAgentPromo.code} — ${getAgentPromoDisplayValue(selectedAgentPromo)} OFF`
+                        : 'Select a promo code...'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAgentPromoDropdown ? 'rotate-180' : ''}`} />
+                  </div>
+
+                  {showAgentPromoDropdown && (
+                    <div className="absolute z-30 w-full mt-1 bg-white border border-gray-200 rounded-2xl shadow-2xl max-h-72 overflow-hidden">
+                      <div className="p-2 border-b border-gray-100">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          <input
+                            type="text"
+                            placeholder="Search promo codes..."
+                            value={agentPromoSearch}
+                            onChange={e => setAgentPromoSearch(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                            onClick={e => e.stopPropagation()}
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                      <div className="overflow-y-auto max-h-56">
+                        {loadingAgentPromos ? (
+                          <div className="p-4 text-center"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-emerald-500 mx-auto" /></div>
+                        ) : filteredAgentPromos.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-gray-500">No promo codes found</div>
+                        ) : filteredAgentPromos.map(promo => (
+                          <div key={promo._id}
+                            className="px-4 py-3 hover:bg-emerald-50 cursor-pointer border-b border-gray-100 last:border-0 transition-colors"
+                            onClick={() => applyAgentPromo(promo)}
+                          >
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className="font-mono font-bold text-gray-900 tracking-wider">{promo.code}</span>
+                              <span className="text-emerald-700 font-semibold text-sm">{getAgentPromoDisplayValue(promo)} OFF</span>
+                            </div>
+                            <div className="text-xs text-gray-500 capitalize">
+                              {promo.type === 'percent' ? 'Percentage' : `Fixed ${promo.currency || 'USD'}`}
+                              {promo.valid_to && ` · Expires ${new Date(promo.valid_to).toLocaleDateString()}`}
+                              <span className={`ml-2 px-1.5 py-0.5 rounded text-xs ${promo.active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                                {promo.active ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+                            {promo.notes && <p className="text-xs text-gray-400 mt-0.5 truncate">{promo.notes}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {selectedAgentPromo && (
+                  <div className="flex items-center justify-between bg-emerald-100/60 border border-emerald-200/60 rounded-xl px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-emerald-600" />
+                      <span className="font-mono font-bold text-emerald-800 text-sm">{selectedAgentPromo.code}</span>
+                      <span className="text-emerald-700 text-sm font-semibold">{getAgentPromoDisplayValue(selectedAgentPromo)} OFF</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedAgentPromo(null); }}
+                      className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                    >
+                      <X className="w-3 h-3" /> Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Delivery Channels */}
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700">
+                  Delivery Channels
+                  <span className="ml-1.5 text-xs text-gray-400 font-normal">(select at least one)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "in_app", label: "In-App", desc: "Real-time in-app alert", Icon: Bell, color: "#1EA2E4" },
+                    { id: "email", label: "Email", desc: "Email to user's inbox", Icon: Mail, color: "#6366f1" },
+                    { id: "sms", label: "SMS", desc: "Text message to phone", Icon: MessageSquare, color: "#10b981" },
+                    { id: "push", label: "Push", desc: "Mobile push notification", Icon: Smartphone, color: "#f59e0b" },
+                  ].map(({ id, label, desc, Icon, color }) => {
+                    const active = newNotification.channels?.includes(id) || false;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          const chs = newNotification.channels || [];
+                          setNewNotification({ ...newNotification, channels: active ? chs.filter(c => c !== id) : [...chs, id] });
+                        }}
+                        className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left w-full ${
+                          active ? "border-[#1EA2E4] bg-blue-50/60" : "border-gray-200 bg-white/80 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: active ? `${color}1a` : "#f3f4f6" }}>
+                          <Icon className="w-4 h-4" style={{ color: active ? color : "#9ca3af" }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1">
+                            <span className={`text-sm font-semibold ${active ? "text-gray-900" : "text-gray-500"}`}>{label}</span>
+                            {active && <Check className="w-3.5 h-3.5 text-[#1EA2E4]" />}
+                          </div>
+                          <p className="text-xs text-gray-400 truncate">{desc}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-gray-700">Category</label>
@@ -910,7 +1087,7 @@ export default function AgentNotificationScreen() {
                     className="w-full px-4 py-3.5 bg-white/80 backdrop-blur-sm border-2 border-gray-300/50 rounded-2xl focus:outline-none focus:ring-3 focus:ring-blue-500/20 focus:border-blue-400 transition-all duration-300"
                   >
                     <option value="system">normal</option>
-                   
+
                   </select>
                 </div>
 
@@ -945,7 +1122,7 @@ export default function AgentNotificationScreen() {
             <div className="border-t border-gray-200/50 bg-gradient-to-r from-gray-50/50 to-blue-50/30 p-6 rounded-b-3xl backdrop-blur-sm">
               <div className="flex gap-4">
                 <button
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={() => { setShowCreateModal(false); setSelectedAgentPromo(null); }}
                   className="flex-1 px-6 py-3.5 bg-white/80 backdrop-blur-sm border-2 border-gray-300/50 hover:bg-gray-50/80 text-gray-700 rounded-2xl font-bold transition-all duration-300 hover:shadow-lg"
                 >
                   Cancel

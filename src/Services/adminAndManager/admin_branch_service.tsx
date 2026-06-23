@@ -57,6 +57,7 @@ export interface IBranch {
   email?: string;
   imageLoc?: string;
   active?: boolean;
+  branchManager?: string | { _id: string; [key: string]: any };
   createdAt?: string;
   updatedAt?: string;
   __v?: number;

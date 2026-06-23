@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { User, Edit, Save, X, MapPin, Calendar, CreditCard, Shield, Phone, Mail, CheckCircle, Clock, AlertCircle, PlusCircle, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { User, Edit, Save, X, MapPin, Calendar, CreditCard, Shield, Phone, Mail, CheckCircle, Clock, AlertCircle, PlusCircle, RefreshCw, Upload, Image as ImageIcon } from 'lucide-react';
 import Sidebar from '../../components/CustomerSidebar';
 import { useAppDispatch, useAppSelector } from '../../app/hooks';
 import { selectProfile, selectProfileStatus } from '../../features/profile/profileSelectors';
 import { getProfileByRoleThunk, updateProfileThunk, createProfileThunk } from '../../features/profile/profileThunks';
+import { supabase } from '../../helpers/supa_base_client';
+import { ZIM_CITIES, ZIM_CITY_TO_PROVINCE } from '../../utils/constants';
 
 // Interfaces
 interface ProfileAddress {
@@ -15,6 +17,8 @@ interface ProfileData {
   dob?: string; national_id?: string; address?: ProfileAddress; driver_license?: { number?: string; class?: string; expires_at?: string; verified?: boolean };
   preferences?: { currency?: string; locale?: string }; gdpr?: { marketing_opt_in?: boolean }; status?: string;
   email_verified?: boolean; created_at?: string; updated_at?: string; roles?: string[];
+  kyc_status?: string;
+  national_id_front_url?: string; national_id_back_url?: string;
 }
 
 // LocalStorage helpers
@@ -55,6 +59,18 @@ const Profile = () => {
   const [formData, setFormData] = useState<Partial<ProfileData>>(initialFormData);
   const [hasProfile, setHasProfile] = useState(false);
   const [notification, setNotification] = useState({ message: '', type: 'info' as 'success' | 'error' | 'info' });
+
+  // Document upload state
+  const [nationalIdFrontUrl, setNationalIdFrontUrl] = useState('');
+  const [nationalIdBackUrl, setNationalIdBackUrl] = useState('');
+  const [licFrontUrl, setLicFrontUrl] = useState('');
+  const [licBackUrl, setLicBackUrl] = useState('');
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState<string | null>(null);
+
+  // Hidden file input refs for document upload
+  const fileInputCaptureRef = useRef<HTMLInputElement>(null);
+  const fileInputGalleryRef = useRef<HTMLInputElement>(null);
 
   // Initialize from localStorage on component mount
   useEffect(() => {
@@ -156,6 +172,12 @@ const Profile = () => {
           updated_at: data.updated_at || authUser.updated_at,
           roles: data.roles || authUser.roles || []
         };
+
+        // Populate document URL state
+        setNationalIdFrontUrl(data.national_id_front_url || '');
+        setNationalIdBackUrl(data.national_id_back_url || '');
+        setLicFrontUrl(data.driver_license?.front_url || '');
+        setLicBackUrl(data.driver_license?.back_url || '');
       }
     }
 
@@ -213,6 +235,16 @@ const Profile = () => {
     };
     return icons[notification.type];
   }, [notification.type]);
+
+  const getKycBadge = useCallback((kycStatus?: string) => {
+    const badges: Record<string, JSX.Element> = {
+      verified: <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium flex items-center gap-1"><CheckCircle className="w-3 h-3" />KYC Verified</span>,
+      pending: <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium flex items-center gap-1"><Clock className="w-3 h-3" />KYC Pending</span>,
+      rejected: <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium flex items-center gap-1"><AlertCircle className="w-3 h-3" />KYC Rejected</span>,
+      not_submitted: <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm font-medium flex items-center gap-1"><AlertCircle className="w-3 h-3" />KYC Not Submitted</span>,
+    };
+    return kycStatus ? (badges[kycStatus] ?? null) : null;
+  }, []);
 
   // Handlers
   const handleCreateProfile = () => {
@@ -393,7 +425,12 @@ const Profile = () => {
   const handleAddressCityChange = (value: string) => {
     setFormData(prev => ({
       ...prev,
-      address: { ...prev.address, city: value }
+      address: {
+        ...prev.address,
+        city: value,
+        region: ZIM_CITY_TO_PROVINCE[value] ?? '',
+        country: 'Zimbabwe',
+      }
     }));
   };
 
@@ -416,6 +453,59 @@ const Profile = () => {
       ...prev,
       gdpr: { ...prev.gdpr, marketing_opt_in: checked }
     }));
+  };
+
+  // Document upload helpers
+  const uploadDocToSupabase = async (file: File, field: string): Promise<string> => {
+    const auth = JSON.parse(localStorage.getItem('car_rental_auth') || '{}');
+    const userId = auth?.user?._id || auth?.user?.id || 'unknown';
+    const ext = file.name.split('.').pop();
+    const path = `${Date.now()}_${userId}_${field}.${ext}`;
+
+    setUploadingField(field);
+    try {
+      const { error } = await supabase.storage.from('topics').upload(path, file, { upsert: false });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from('topics').getPublicUrl(path);
+      return urlData.publicUrl;
+    } finally {
+      setUploadingField(null);
+    }
+  };
+
+  const handleDocUpload = async (file: File, field: string) => {
+    try {
+      const url = await uploadDocToSupabase(file, field);
+      if (field === 'national_id_front') setNationalIdFrontUrl(url);
+      else if (field === 'national_id_back') setNationalIdBackUrl(url);
+      else if (field === 'license_front') setLicFrontUrl(url);
+      else if (field === 'license_back') setLicBackUrl(url);
+
+      showNotify('Document uploaded successfully!', 'success');
+
+      // Immediately PATCH profile with new URL
+      const profileId = formData._id || formData.id || authUser?._id;
+      if (profileId) {
+        const patch: any = {};
+        if (field === 'national_id_front') patch['national_id_front_url'] = url;
+        else if (field === 'national_id_back') patch['national_id_back_url'] = url;
+        else if (field === 'license_front') patch['driver_license'] = { ...(formData.driver_license || {}), front_url: url };
+        else if (field === 'license_back') patch['driver_license'] = { ...(formData.driver_license || {}), back_url: url };
+        await dispatch(updateProfileThunk({ id: profileId, profileData: patch })).unwrap();
+      }
+    } catch (e: any) {
+      showNotify(e?.message || 'Upload failed', 'error');
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && showUploadModal) {
+      handleDocUpload(file, showUploadModal);
+    }
+    setShowUploadModal(null);
+    // Reset input so same file can be re-selected
+    e.target.value = '';
   };
 
   // Memoized current data for display
@@ -461,8 +551,96 @@ const Profile = () => {
     return baseData;
   }, [formData, isEditing, isCreating, profile, userRole, authUser]);
 
+  const isKycVerified = currentData.kyc_status === 'verified';
+
+  // ImageUploadField component (inline, for document tiles)
+  const ImageUploadField = ({ field, label, url, locked = false }: { field: string; label: string; url: string; locked?: boolean }) => {
+    const isLoading = uploadingField === field;
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <button
+          type="button"
+          onClick={() => !locked && setShowUploadModal(field)}
+          disabled={isLoading || locked}
+          className={`relative w-full h-28 rounded-xl border-2 border-dashed overflow-hidden group transition-all ${locked ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-70' : 'border-blue-200 hover:border-blue-400 bg-blue-50/50 hover:bg-blue-50'} disabled:opacity-60 disabled:cursor-not-allowed`}
+        >
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs text-blue-600">Uploading...</span>
+            </div>
+          ) : url ? (
+            <>
+              <img src={url} alt={label} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <Edit className="w-5 h-5 text-white" />
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full gap-2">
+              <Upload className="w-6 h-6 text-blue-400" />
+              <span className="text-xs text-blue-500 font-medium">Upload</span>
+            </div>
+          )}
+        </button>
+        <span className="text-xs text-gray-500 font-medium">{label}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex">
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-80 max-w-[90vw]">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">Upload Document</h3>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <button
+                type="button"
+                onClick={() => fileInputCaptureRef.current?.click()}
+                className="flex flex-col items-center gap-2 p-4 border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-300 transition-all"
+              >
+                <ImageIcon className="w-7 h-7 text-blue-500" />
+                <span className="text-sm font-medium text-gray-700">Use Camera</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputGalleryRef.current?.click()}
+                className="flex flex-col items-center gap-2 p-4 border border-gray-200 rounded-xl hover:bg-blue-50 hover:border-blue-300 transition-all"
+              >
+                <Upload className="w-7 h-7 text-blue-500" />
+                <span className="text-sm font-medium text-gray-700">Upload File</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowUploadModal(null)}
+              className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden file inputs */}
+      <input
+        ref={fileInputCaptureRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
+      <input
+        ref={fileInputGalleryRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
+
       {/* Notification Popup */}
       {showNotification && (
         <div className={`fixed top-4 right-4 z-50 animate-slide-in border rounded-xl shadow-lg p-4 max-w-sm ${getNotificationStyles()}`}>
@@ -561,7 +739,12 @@ const Profile = () => {
                 
                 {status !== 'loading' && (
                   <div className="flex gap-3 w-full sm:w-auto">
-                    {!isEditing && !isCreating ? (
+                    {isKycVerified ? (
+                      <div className="flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 rounded-xl">
+                        <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                        <span className="text-sm font-medium text-green-800">Profile Verified & Locked</span>
+                      </div>
+                    ) : !isEditing && !isCreating ? (
                       hasProfile ? (
                         <>
                           <button onClick={handleEditProfile} className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-md hover:shadow-lg flex-1 sm:flex-none justify-center">
@@ -632,6 +815,15 @@ const Profile = () => {
                         </span>
                       ))}
                     </div>
+                  </div>
+                )}
+                {currentData.kyc_status && (
+                  <div className={`rounded-xl p-4 ${currentData.kyc_status === 'verified' ? 'bg-green-50' : currentData.kyc_status === 'pending' ? 'bg-yellow-50' : currentData.kyc_status === 'rejected' ? 'bg-red-50' : 'bg-gray-50'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Shield className={`w-4 h-4 ${currentData.kyc_status === 'verified' ? 'text-green-600' : currentData.kyc_status === 'pending' ? 'text-yellow-600' : currentData.kyc_status === 'rejected' ? 'text-red-600' : 'text-gray-500'}`} />
+                      <span className={`text-sm font-medium ${currentData.kyc_status === 'verified' ? 'text-green-900' : currentData.kyc_status === 'pending' ? 'text-yellow-900' : currentData.kyc_status === 'rejected' ? 'text-red-900' : 'text-gray-700'}`}>KYC Status</span>
+                    </div>
+                    {getKycBadge(currentData.kyc_status)}
                   </div>
                 )}
               </div>
@@ -713,14 +905,20 @@ const Profile = () => {
                           />
                         </div>
                         <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-                          <input 
-                            type="text" 
+                          <label className="block text-sm font-medium text-gray-700 mb-1">City / Town</label>
+                          <select
                             value={formData.address?.city || ''}
                             onChange={(e) => handleAddressCityChange(e.target.value)}
-                            placeholder="City"
-                            className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition-all" 
-                          />
+                            className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition-all bg-white"
+                          >
+                            <option value="">Select city / town</option>
+                            {ZIM_CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          {formData.address?.city && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Province: {ZIM_CITY_TO_PROVINCE[formData.address.city] ?? '—'} · Country: Zimbabwe
+                            </p>
+                          )}
                         </div>
                         <div className="mb-4">
                           <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code</label>
@@ -737,11 +935,13 @@ const Profile = () => {
                       <div className="space-y-2 p-4 bg-gray-50 rounded-xl">
                         <p className="text-gray-900">{currentData.address?.line1 || 'Not set'}</p>
                         {currentData.address?.line2 && <p className="text-gray-900">{currentData.address.line2}</p>}
+                        {currentData.address?.city && (
+                          <p className="text-gray-900">
+                            {currentData.address.city}, {ZIM_CITY_TO_PROVINCE[currentData.address.city] ?? currentData.address.region ?? ''}
+                          </p>
+                        )}
                         <p className="text-gray-900">
-                          {[currentData.address?.city, currentData.address?.region].filter(Boolean).join(', ')}
-                        </p>
-                        <p className="text-gray-900">
-                          {[currentData.address?.postal_code, currentData.address?.country].filter(Boolean).join(', ')}
+                          {[currentData.address?.postal_code, 'Zimbabwe'].filter(Boolean).join(', ')}
                         </p>
                       </div>
                     )}
@@ -783,6 +983,43 @@ const Profile = () => {
                         </span>
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Identity Documents */}
+                <div className="bg-white rounded-2xl shadow-xl p-6 border border-blue-100 lg:col-span-2">
+                  <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-blue-600" />Identity Documents
+                  </h2>
+                  {isKycVerified ? (
+                    <div className="flex items-center gap-2 mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-xl">
+                      <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+                      <p className="text-sm text-green-800 font-medium">Your identity documents have been verified and cannot be changed.</p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 mb-5">Upload your National ID and Driver's Licence images. These are saved immediately when uploaded.</p>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {/* National ID */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1">
+                        <Shield className="w-4 h-4 text-blue-500" />National ID
+                      </h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <ImageUploadField field="national_id_front" label="Front Side" url={nationalIdFrontUrl} locked={isKycVerified} />
+                        <ImageUploadField field="national_id_back" label="Back Side" url={nationalIdBackUrl} locked={isKycVerified} />
+                      </div>
+                    </div>
+                    {/* Driver's Licence */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1">
+                        <CreditCard className="w-4 h-4 text-blue-500" />Driver's Licence
+                      </h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <ImageUploadField field="license_front" label="Front Side" url={licFrontUrl} locked={isKycVerified} />
+                        <ImageUploadField field="license_back" label="Back Side" url={licBackUrl} locked={isKycVerified} />
+                      </div>
+                    </div>
                   </div>
                 </div>
 

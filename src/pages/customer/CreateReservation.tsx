@@ -440,13 +440,17 @@ const handleBreakdownChange = (index: number, field: keyof BreakdownItem, value:
     }
     
     try {
-        await reservationsService.createReservation(payload);
+        const created = await reservationsService.createReservation(payload);
         setSuccess(true);
-        
-        // Redirect after 2 seconds
+
+        // Redirect to reservation detail after 1.5s
         setTimeout(() => {
-          navigate(`/vehicle`);
-        }, 2000);
+          if ((created as any)?._id) {
+            navigate(`/reservations/${(created as any)._id}`);
+          } else {
+            navigate('/reservations');
+          }
+        }, 1500);
         
       } catch (err: any) {
         setError(err.message || 'Failed to create reservation');
@@ -601,7 +605,7 @@ const handleBreakdownChange = (index: number, field: keyof BreakdownItem, value:
                 <CheckCircle className="w-6 h-6 text-green-600" />
                 <div>
                   <p className="font-semibold text-green-800">Reservation Created Successfully!</p>
-                  <p className="text-sm text-green-600">Redirecting to vehicles...</p>
+                  <p className="text-sm text-green-600">Redirecting to your booking...</p>
                 </div>
               </div>
             )}

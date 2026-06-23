@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import Sidebar from "../../../components/ManagerSideBar";
+import Sidebar from "../../../components/Sidebar";
 import {
   Search,
   Eye,
@@ -37,13 +37,7 @@ import DriverProfileService, {
   type DriverProfile, 
   type UpdateDriverPayload
 } from "../../../Services/adminAndManager/driver_profiles_service";
-import { createClient } from "@supabase/supabase-js";
-
-
-const supabaseUrl = "https://hfbudnmvjbzvpefvtiuu.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmYnVkbm12amJ6dnBlZnZ0aXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDczOTE2NTgsImV4cCI6MjA2Mjk2NzY1OH0.ionCach1O5vekQDoP7Bx6pSVaLXduJN9kYbWwlaRzKk";
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from "../../../helpers/supa_base_client";
 
 const sanitizeFilename = (filename: string): string => {
     return filename.replace(/[^a-zA-Z0-9.\-_]/g, '_');
@@ -165,8 +159,8 @@ const idImageRef = useRef<HTMLInputElement>(null);
       searchTerm === "" ||
       driver.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       driver.bio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      driver.user_id.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      driver.user_id.full_name.toLowerCase().includes(searchTerm.toLowerCase());
+      (driver.user_id?.email ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (driver.user_id?.full_name ?? '').toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesCity = cityFilter === "all" || driver.base_city === cityFilter;
     
@@ -727,7 +721,7 @@ const handleIdImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
                               </div>
                               <div className="flex-1">
                                 <h3 className="text-lg font-bold text-white">{driver.display_name}</h3>
-                                <p className="text-sm text-white/90">{driver.user_id.full_name}</p>
+                                <p className="text-sm text-white/90">{driver.user_id?.full_name ?? 'N/A'}</p>
                                 <div className="flex items-center gap-1 mt-1">
                                   {getRatingStars(driver.rating_average)}
                                   <span className="text-xs text-white/90 ml-1">
@@ -1029,7 +1023,7 @@ const handleIdImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
                     </div>
                     <div>
                       <h3 className="text-2xl font-bold">{selectedDriver.display_name}</h3>
-                      <p className="text-white/90">{selectedDriver.user_id.full_name}</p>
+                      <p className="text-white/90">{selectedDriver.user_id?.full_name ?? 'N/A'}</p>
                       <div className="flex items-center gap-2 mt-2">
                         {getRatingStars(selectedDriver.rating_average)}
                         <span className="text-sm">({selectedDriver.rating_count} reviews)</span>
@@ -1048,14 +1042,14 @@ const handleIdImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
                       <p className="text-xs text-gray-500">Email</p>
                       <div className="flex items-center gap-2 mt-1">
                         <Mail className="w-4 h-4 text-gray-400" />
-                        <p className="text-sm font-medium">{selectedDriver.user_id.email}</p>
+                        <p className="text-sm font-medium">{selectedDriver.user_id?.email ?? 'N/A'}</p>
                       </div>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Phone</p>
                       <div className="flex items-center gap-2 mt-1">
                         <Phone className="w-4 h-4 text-gray-400" />
-                        <p className="text-sm font-medium">{selectedDriver.user_id.phone || "N/A"}</p>
+                        <p className="text-sm font-medium">{selectedDriver.user_id?.phone || "N/A"}</p>
                       </div>
                     </div>
                     <div>
@@ -1195,7 +1189,7 @@ const handleIdImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
                         <p className="text-xs text-gray-500">Approved By</p>
                         <div className="flex items-center gap-2 mt-1">
                           <UserCheck className="w-4 h-4 text-gray-400" />
-                          <p className="text-sm font-medium">{selectedDriver.approved_by_admin.full_name}</p>
+                          <p className="text-sm font-medium">{selectedDriver.approved_by_admin?.full_name ?? 'N/A'}</p>
                         </div>
                       </div>
                       <div>

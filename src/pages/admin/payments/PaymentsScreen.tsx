@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "../../../components/Sidebar";
 import PaymentService from "../../../Services/payment_service";
+import { fetchBranches, type IBranch } from "../../../Services/adminAndManager/admin_branch_service";
 import {
   Search,
   Eye,
@@ -68,6 +69,8 @@ const PaymentsScreen: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [methodFilter, setMethodFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [branchFilter, setBranchFilter] = useState<string>("all");
+  const [branches, setBranches] = useState<IBranch[]>([]);
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -102,29 +105,33 @@ const PaymentsScreen: React.FC = () => {
   };
 
   // Load payments
-  // Load payments
-    const loadPayments = useCallback(async () => {
+  const loadPayments = useCallback(async (branchId?: string) => {
     try {
-        setLoading(true);
-        setError(null);
-        const response = await PaymentService.getAllPayments();
-        
-        let paymentsData = response.items || [];
-        setTotalItems(paymentsData.length);
-        setPayments(paymentsData);
+      setLoading(true);
+      setError(null);
+      const response = await PaymentService.getAllPayments({ branch_id: branchId !== "all" ? branchId : undefined });
+      const paymentsData = response.items || [];
+      setTotalItems(paymentsData.length);
+      setPayments(paymentsData);
     } catch (err: any) {
-        const errorMessage = err?.message || "Failed to load payments";
-        setError(errorMessage);
-        showSnackbar(errorMessage, "error");
+      const errorMessage = err?.message || "Failed to load payments";
+      setError(errorMessage);
+      showSnackbar(errorMessage, "error");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-    }, []);
+  }, []);
 
   // Initial load
   useEffect(() => {
     loadPayments();
+    fetchBranches().then(r => setBranches(r.data || [])).catch(() => {});
   }, [loadPayments]);
+
+  // Reload when branch filter changes
+  useEffect(() => {
+    loadPayments(branchFilter);
+  }, [branchFilter, loadPayments]);
 
   // Check payment status
 const checkPaymentStatus = async (paymentId: string) => {
@@ -439,6 +446,18 @@ const formatDateTime = (dateString?: string) => {
                       <option value="wallet">Wallet</option>
                     </select>
                     <CreditCard className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+
+                  <div className="relative">
+                    <select
+                      value={branchFilter}
+                      onChange={(e) => setBranchFilter(e.target.value)}
+                      className="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1EA2E4] bg-white appearance-none pr-10 min-w-[160px]"
+                    >
+                      <option value="all">All Branches</option>
+                      {branches.map(b => <option key={b._id} value={b._id}>{b.name}</option>)}
+                    </select>
+                    <Building className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                   </div>
                 </div>
               </div>

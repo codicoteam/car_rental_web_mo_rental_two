@@ -33,6 +33,9 @@ export interface IParticipant {
   user_id: string;
   role_at_time?: string | null;
   joined_at?: string;
+  // populated by getConversationsForUserPopulated
+  full_name?: string;
+  roles?: string[];
 }
 
 export interface IChatConversation {
@@ -81,6 +84,12 @@ export async function fetchAllUsers(): Promise<IUser[]> {
   throw new Error("Unexpected users response");
 }
 
+/** Contacts this user is allowed to chat with (role-filtered by the backend). */
+export async function fetchChatContacts(): Promise<IUser[]> {
+  const res = await axios.get(`${API_BASE}/chats/contacts`, { headers: authHeaders() });
+  return (res.data?.data ?? []) as IUser[];
+}
+
 export async function fetchMyConversations(): Promise<IChatConversation[]> {
   const res = await axios.get(`${API_BASE}/chats/conversations`, {
     headers: authHeaders(),
@@ -91,25 +100,11 @@ export async function fetchMyConversations(): Promise<IChatConversation[]> {
 export async function createDirectConversation(
   otherUserId: string
 ): Promise<IChatConversation> {
-  const body = {
-    title: "start",
-    participant_ids: [otherUserId],
-    type: "direct",
-    context_type: "general",
-  };
-  console.log("Creating direct conversation with body:", JSON.stringify(body));
   const res = await axios.post(
-    `${API_BASE}/chats/conversations`,
-    JSON.stringify(body), // ensure raw JSON body
-    {
-      headers: {
-        ...authHeaders(),
-        "Content-Type": "application/json", // make intent explicit
-        Accept: "application/json",
-      },
-    }
+    `${API_BASE}/chats/conversations/find-or-create`,
+    { participant_id: otherUserId },
+    { headers: authHeaders() }
   );
-
   return res.data?.data as IChatConversation;
 }
 

@@ -297,7 +297,7 @@ const VehicleTrackerService = {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
       );
-      
+
       if (response.data.success) {
         return response.data.data;
       } else {
@@ -309,6 +309,25 @@ const VehicleTrackerService = {
       } else {
         throw "An unexpected error occurred";
       }
+    }
+  },
+
+  getVehicleLastLocation: async (vehicleId: string): Promise<{
+    tracker: VehicleTracker;
+    last_location: { latitude: number; longitude: number; speed_kmh?: number; heading_deg?: number; accuracy_m?: number; at?: string; source?: string } | null;
+  } | null> => {
+    try {
+      const token = getAuthToken();
+      const response = await axios.get(
+        `${BASE_URL}/vehicle/${vehicleId}/location`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      return response.data?.data || response.data || null;
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error) && (error.response?.status === 404 || error.response?.status === 204)) {
+        return null;
+      }
+      return null;
     }
   },
 };

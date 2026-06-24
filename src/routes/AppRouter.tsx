@@ -1,7 +1,9 @@
 // Admin pages
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import React, { useState } from "react";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { ThemeProvider } from "../components/ThemeProvider";
+import AppLoader from "../components/AppLoader";
 import Welcome from "../pages/public/WelcomePage";
 import LandingPage from "../pages/public/LandingPage";
 import Dashboard from "../pages/admin/AdminDashboardPage";
@@ -110,8 +112,11 @@ import ReceptionistChatPage from "../pages/receptionist/chat/ReceptionistChatPag
 
 function App() {
   usePushNotifications();
+  const [appReady, setAppReady] = useState(false);
+
   return (
     <ThemeProvider>
+      {!appReady && <AppLoader duration={2800} onDone={() => setAppReady(true)} />}
       <Router>
         <Routes>
           {/* Admin routes */}

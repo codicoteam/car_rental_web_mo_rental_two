@@ -1,6 +1,8 @@
 import axios from 'axios';
 
 const BASE_URL = "http://13.61.185.238:5050/api/v1/reports/admin";
+const CHARTS_URL = `${BASE_URL}/charts`;
+const FINANCIAL_URL = `${BASE_URL}/financial`;
 
 /**
  * Helper to get the stored auth token
@@ -350,3 +352,145 @@ const ReportsService = {
 };
 
 export default ReportsService;
+
+// ─── Chart / Financial Types ──────────────────────────────────────────────────
+
+export interface MonthlyRevenuePoint {
+  month: string;
+  revenue: number;
+  transactions: number;
+}
+
+export interface BookingStatusPoint {
+  status: string;
+  count: number;
+  percentage: number;
+}
+
+export interface FleetUtilizationPoint {
+  state: string;
+  count: number;
+  percentage: number;
+}
+
+export interface RevenueBranchPoint {
+  branch: string;
+  branch_id: string;
+  revenue: number;
+  bookings: number;
+}
+
+export interface PaymentMethodPoint {
+  method: string;
+  label: string;
+  count: number;
+  total: number;
+  percentage: number;
+}
+
+export interface MonthlyBookingsPoint {
+  month: string;
+  created: number;
+  completed: number;
+  cancelled: number;
+}
+
+export interface IncidentCostPoint {
+  type: string;
+  label: string;
+  count: number;
+  estimated_cost: number;
+  final_cost: number;
+}
+
+export interface ChartsKPIs {
+  total_revenue: number;
+  total_transactions: number;
+  total_bookings: number;
+  completed_bookings: number;
+  avg_booking_value: number;
+  fleet_utilization_pct: number;
+  fleet_rented: number;
+  fleet_total: number;
+  active_reservations: number;
+  pending_incidents: number;
+}
+
+export interface ChartsData {
+  period: { from: string; to: string };
+  kpis: ChartsKPIs;
+  monthly_revenue: MonthlyRevenuePoint[];
+  booking_status_dist: BookingStatusPoint[];
+  fleet_utilization: FleetUtilizationPoint[];
+  revenue_by_branch: RevenueBranchPoint[];
+  payment_method_split: PaymentMethodPoint[];
+  monthly_bookings: MonthlyBookingsPoint[];
+  incident_costs_by_type: IncidentCostPoint[];
+}
+
+export interface MonthlyPLRow {
+  month: string;
+  revenue: number;
+  service_cost: number;
+  incident_cost: number;
+  total_cost: number;
+  gross_profit: number;
+  transactions: number;
+}
+
+export interface FinancialTotals {
+  revenue: number;
+  service_cost: number;
+  incident_cost: number;
+  total_cost: number;
+  gross_profit: number;
+  transactions: number;
+  gross_margin_pct: number;
+}
+
+export interface FinancialData {
+  period: { from: string; to: string };
+  monthly_pl: MonthlyPLRow[];
+  totals: FinancialTotals;
+}
+
+// ─── Chart & Financial Service ────────────────────────────────────────────────
+
+const getAuthHeader = () => {
+  const stored = localStorage.getItem("car_rental_auth");
+  if (!stored) return {};
+  try {
+    const { token } = JSON.parse(stored);
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+};
+
+export const ChartsService = {
+  getChartsData: async (from?: string, to?: string, branchId?: string): Promise<ChartsData> => {
+    const params: Record<string, string> = {};
+    if (from) params.from = from;
+    if (to) params.to = to;
+    if (branchId) params.branch_id = branchId;
+
+    const res = await axios.get<{ success: boolean; data: ChartsData }>(CHARTS_URL, {
+      headers: getAuthHeader(),
+      params,
+    });
+    return res.data.data;
+  },
+
+  getFinancialData: async (from?: string, to?: string, branchId?: string): Promise<FinancialData> => {
+    const params: Record<string, string> = {};
+    if (from) params.from = from;
+    if (to) params.to = to;
+    if (branchId) params.branch_id = branchId;
+
+    const res = await axios.get<{ success: boolean; data: FinancialData }>(FINANCIAL_URL, {
+      headers: getAuthHeader(),
+      params,
+    });
+    return res.data.data;
+  },
+};
